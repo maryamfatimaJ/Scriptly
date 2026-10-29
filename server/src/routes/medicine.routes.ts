@@ -19,6 +19,7 @@ router.use(requireAuth);
 // Registered before "/:id" so "price" is never parsed as a medicine id.
 router.get("/search", validate(searchMedicinesSchema, "query"), medicineController.search);
 router.get("/price", validate(priceLookupSchema, "query"), medicineController.price);
+router.get("/suggestions", medicineController.suggestions);
 router.get("/:id", medicineController.getById);
 router.get("/:id/images/:imageId", validate(medicineImageParamsSchema, "params"), medicineController.image);
 

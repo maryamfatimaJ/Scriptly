@@ -316,3 +316,31 @@ medira.pk via support@medira.pk.
 **Decision: nothing imported.** The catalogue code, importers and coverage
 report are in place (README §4.3); records arrive when the project owner
 chooses a source and, where needed, holds written permission.
+
+
+---
+
+# Addendum — 29 October 2026 (first real catalogue records)
+
+The project owner supplied 20 products and decided to list their DRAP
+maximum retail prices. Each was checked against DRAP's public PharmaPrice
+Index (https://e.dra.gov.pk/public/price) with one search per brand (13
+searches, no bulk download). The import file is generated from the DRAP
+rows themselves — product, registration number, manufacturer, pack, price
+and effective date — and the owner's figures were cross-checked against
+them: all matched.
+
+- **Imported: 19** (`server/data/drap-verified-2026-10-29.csv`), price type
+  `OFFICIAL_MRP`, `verified_on` 2026-10-29.
+- **Febrol DS 60 ml** had no price in the owner's list; DRAP lists Rs 94.97
+  (reg. 023533), which was used.
+- **Not imported:** "Paracetamol Suspension 120 mg/5 ml, 60 ml, Rs 66.01" —
+  no brand, and DRAP lists three different products at that pack and price
+  (Panadol Junior 083993, Febrol 023532, Nuberol-P 093671). Choosing one
+  would be a guess.
+- DawaCheck pages were not fetched (its robots.txt disallows AI crawlers);
+  DRAP is the primary source in every row.
+- DRAP's index is marked "All rights reserved". These 19 rows are a small,
+  owner-selected set of factual prices with attribution, not a copy of the
+  index; extending this to the full catalogue still needs DRAP's written
+  permission (contacts above).

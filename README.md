@@ -29,18 +29,20 @@ Built for **Hacktoberfest Hack Day with MLH × Zeppelin Labs × DEV**.
   (their reminders go with them) and delete prescriptions (with their image).
 - **Scripty** — an in-app assistant (Claude via the Anthropic API) that
   answers from your own records and sourced medicine information.
-- **Medicine search** — indexed, paginated catalogue search with detail
-  pages and honest "unavailable" states.
+- **Medicine search** — indexed, paginated search over 19 Pakistani
+  products whose official DRAP maximum retail price, pack, registration
+  number and manufacturer were each checked against DRAP's price index
+  (Panadol, Brufen, Risek, Augmentin, Glucophage and more), with detail
+  pages, one-click suggestions and honest "unavailable" states.
 
 **Honest limitations:**
 
-- **The Pakistani medicine catalogue is empty.** No source with permission
-  to reuse its data has been imported (DRAP's index is "All rights
-  reserved"; DawaCheck's terms forbid it). See
-  `docs/medicine-data-sources.md`. Search works but returns nothing until
-  permitted data is imported with `npm run catalogue:import`.
-- **No verified prices** — every price lookup says "Verified price
-  unavailable" and links to DRAP. No price is ever estimated.
+- **The catalogue is small: 19 products.** They were selected by the
+  project owner and verified one by one against DRAP; it is not the whole
+  Pakistani market (DRAP's full index is "All rights reserved" and was not
+  bulk-copied). Anything else shows "Verified price unavailable" with a
+  link to DRAP. Prices are DRAP **maximum retail prices**, not what a
+  pharmacy charges. No product photos yet.
 - **Reminders are in-app only** unless SMTP email is configured; there are
   no push notifications.
 - Live AI tests used **generated** prescription images, not real patients'.
@@ -57,7 +59,9 @@ Vitest + Supertest.
 ```bash
 docker compose up -d                       # PostgreSQL on :5433
 cp .env.example server/.env                # then fill in secrets (see §2)
-cd server && npm install && npx prisma migrate deploy && npm run dev   # API :4000
+cd server && npm install && npx prisma migrate deploy
+npm run catalogue:import -- data/drap-verified-2026-10-29.csv --apply   # the 19 verified products
+npm run dev                                # API :4000
 cd client && npm install && npm run dev    # app :5173
 ```
 
@@ -544,9 +548,13 @@ substring/misspelling for 4+ characters) and paginated, with a total count.
 A strength or form typed into the query ("panadol 500 mg tab") is recognised
 and applied as a filter. Nothing is searched from a list in the browser.
 
-**What is in it today: nothing real.** The catalogue only holds records
-imported from a source that permits reuse, and none has been imported yet
-(`npm run catalogue:report` measures it from the database). The ten generic
+**What is in it today: 19 real products** (`server/data/drap-verified-2026-10-29.csv`),
+chosen by the project owner and each checked on 29 Oct 2026 against DRAP's
+PharmaPrice Index for the exact product, registration number, pack and
+price. Every price is an official maximum retail price with its DRAP
+effective date. One requested row ("Paracetamol Suspension 120 mg/5 ml,
+60 ml") was left out: it names no brand and matches three different DRAP
+products. `npm run catalogue:report` measures coverage from the database. The ten generic
 medicines an old seed created are flagged `isSynthetic` and hidden from
 search, detail pages, prescription matching, prices and Scripty; test
 fixtures are synthetic too and are visible only under

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ApiError } from "@/api/client";
 import * as medicinesApi from "@/api/medicines";
 import { ProductThumbnail } from "@/components/ProductImage";
@@ -47,6 +47,10 @@ export function MedicineInformation() {
     retry: false,
   });
 
+  // Only medicines that really exist in the catalogue are suggested.
+  const { data: suggestionData } = useQuery({ queryKey: ["medicines", "suggestions"], queryFn: medicinesApi.getSuggestions });
+  const suggestions = suggestionData?.suggestions ?? [];
+
   const results = data?.pages.flatMap((page) => page.medicines) ?? [];
   const first = data?.pages[0];
   const total = first?.total ?? 0;
@@ -81,6 +85,22 @@ export function MedicineInformation() {
 
       <div className="mt-10 max-w-3xl">
         {!enabled && <p className="text-charcoal/70">Type a medicine name, or just its first letter, to search.</p>}
+
+        {!enabled && suggestions.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray">Try:</span>
+            {suggestions.map((s) => (
+              <Link
+                key={s.id}
+                to={`/medicines/${s.id}`}
+                className="rounded-capsule border border-charcoal/20 px-4 py-1.5 text-sm text-charcoal transition hover:border-forest hover:bg-mint/30"
+              >
+                {s.label}
+                {s.detail && <span className="text-charcoal/60"> · {s.detail}</span>}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {enabled && loadingFirstPage && <p className="text-charcoal/70">Searching…</p>}
 

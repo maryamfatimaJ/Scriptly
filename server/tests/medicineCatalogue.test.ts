@@ -6,7 +6,7 @@ import sharp from "sharp";
 import type { Server } from "node:http";
 import { prisma } from "@/db/prisma";
 import { env } from "@/config/env";
-import { interpretQuery, normalizeStrength } from "@/services/medicine.service";
+import { detectFormMismatch, interpretQuery, normalizeStrength } from "@/services/medicine.service";
 import { medicineContextLines } from "@/services/scripty/scripty.service";
 import { validateCatalogueFile } from "../scripts/importCatalogue";
 import { validateImageRow } from "../scripts/importImages";
@@ -247,12 +247,29 @@ describe("synthetic (demo) data separation", () => {
     try {
       expect((await search("Qvanol")).total).toBe(0);
       // The ten generic medicines an old seed created are synthetic too.
-      expect((await search("Paracetamol")).medicines.every((m) => m.genericName !== "Paracetamol")).toBe(true);
+      const paracetamol = await search("Paracetamol");
+      const syntheticIds = new Set(
+        (await prisma.medicineReference.findMany({ where: { isSynthetic: true }, select: { id: true } })).map((r) => r.id)
+      );
+      expect(paracetamol.medicines.some((m) => syntheticIds.has(m.id))).toBe(false);
       expect((await user.get(`/api/medicines/${ids.tab10}`)).status).toBe(404);
       expect((await user.get(`/api/medicines/${ids.tab10}/images/${imageId}`)).status).toBe(404);
       expect(await medicineContextLines(ids.tab10)).toEqual([]);
     } finally {
       (env as { catalogueIncludeSynthetic: boolean }).catalogueIncludeSynthetic = before;
+    }
+  });
+});
+
+describe("Medicine Info suggestions", () => {
+  it("suggests only medicines that exist, each opening its real detail page", async () => {
+    const res = await user.get("/api/medicines/suggestions");
+    expect(res.status).toBe(200);
+    for (const suggestion of res.body.suggestions as Array<{ id: string; label: string }>) {
+      const record = await prisma.medicineReference.findUniqueOrThrow({ where: { id: suggestion.id } });
+      expect(record.isSynthetic).toBe(false);
+      expect(record.brandName).toBe(suggestion.label);
+      expect((await user.get(`/api/medicines/${suggestion.id}`)).status).toBe(200);
     }
   });
 });
@@ -270,6 +287,14 @@ describe("Scripty medicine context", () => {
     const lines = (await medicineContextLines(ids.tab20)).join("\n");
     expect(lines).toContain("official DRAP maximum retail price");
     expect(lines).toContain("2026-10-01");
+  });
+});
+
+describe("dosage-form mismatch warning", () => {
+  it("matches whole words, so a gelcap label is not reported as a gel", () => {
+    expect(detectFormMismatch("tablet", "adults take 2 gelcaps every 6 hours")).toEqual({ productForm: "tablet", labelForms: ["gelcap"] });
+    expect(detectFormMismatch("capsule", "swallow 1 tablet whole")).toEqual({ productForm: "capsule", labelForms: ["tablet"] });
+    expect(detectFormMismatch("tablet", "take 2 tablets with water")).toBeNull();
   });
 });
 

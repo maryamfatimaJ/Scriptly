@@ -272,7 +272,10 @@ export async function searchMedicines(query: string, limit = 20): Promise<Medici
 
 // Dosage forms we can recognise in free label text. Used only to WARN
 // about a mismatch, never to correct one.
-const DOSAGE_FORM_WORDS = ["tablet", "capsule", "suspension", "syrup", "injection", "cream", "ointment", "drops", "inhaler", "patch", "suppository", "gel", "solution"];
+const DOSAGE_FORM_WORDS = ["tablet", "capsule", "caplet", "gelcap", "suspension", "syrup", "injection", "cream", "ointment", "drops", "inhaler", "patch", "suppository", "gel", "solution"];
+
+// Whole words only (plural allowed): "gelcaps" is a gelcap, not a gel.
+const hasFormWord = (text: string, word: string) => new RegExp(`\\b${word}s?\\b`).test(text);
 
 /**
  * Detects when the label text we are about to show describes a different
@@ -294,13 +297,13 @@ export function detectFormMismatch(
   const product = productForm.toLowerCase();
   const text = labelText.toLowerCase();
 
-  const productWord = DOSAGE_FORM_WORDS.find((word) => product.includes(word));
+  const productWord = DOSAGE_FORM_WORDS.find((word) => hasFormWord(product, word));
   if (!productWord) return null;
 
   // If the label mentions the product's own form at all, assume it covers it.
-  if (text.includes(productWord)) return null;
+  if (hasFormWord(text, productWord)) return null;
 
-  const labelForms = DOSAGE_FORM_WORDS.filter((word) => word !== productWord && text.includes(word));
+  const labelForms = DOSAGE_FORM_WORDS.filter((word) => word !== productWord && hasFormWord(text, word));
   if (labelForms.length === 0) return null;
 
   return { productForm: productWord, labelForms };
@@ -412,3 +415,27 @@ export async function lookupPriceByName(input: {
 }
 
 export { manualCheckLinksFor };
+
+// Brands offered as one-click examples on the Medicine Info page. A
+// suggestion is returned only when a real (non-synthetic) record for that
+// exact brand exists, and it links to that record — never to a search
+// that might come back empty.
+const SUGGESTED_BRANDS = ["Panadol Extend", "Brufen DS", "Risek"];
+
+export async function getSuggestions() {
+  const suggestions: Array<{ id: string; label: string; detail: string }> = [];
+  for (const brand of SUGGESTED_BRANDS) {
+    const record = await prisma.medicineReference.findFirst({
+      where: { ...visibleCatalogue(), isSynthetic: false, brandName: { equals: brand, mode: "insensitive" } },
+      orderBy: [{ packSize: "asc" }],
+    });
+    if (record) {
+      suggestions.push({
+        id: record.id,
+        label: record.brandName ?? record.genericName,
+        detail: [record.strength, record.formulation].filter(Boolean).join(" "),
+      });
+    }
+  }
+  return suggestions;
+}

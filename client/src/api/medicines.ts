@@ -34,3 +34,8 @@ export function lookupPrice(input: { name: string; strength?: string | null; for
   if (input.form) params.set("form", input.form);
   return apiRequest<{ price: PriceLookupResult }>(`/medicines/price?${params.toString()}`);
 }
+
+/** Example medicines that exist in the catalogue (empty when none do). */
+export function getSuggestions() {
+  return apiRequest<{ suggestions: Array<{ id: string; label: string; detail: string }> }>("/medicines/suggestions");
+}

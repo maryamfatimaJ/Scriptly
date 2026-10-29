@@ -139,10 +139,18 @@ describe("prescription capture -> extraction -> review -> approval workflow", ()
       const extracted = await user.post(`/api/prescriptions/${id}/extract`);
 
       const amoxicillin = extracted.body.prescription.medications.find((m: any) => m.extractedName === "Amoxicillin");
-      // The dev seed (prisma/seed.ts) includes "Amoxicillin 500 mg capsule",
-      // an exact match for the mock candidate's name/strength/form.
-      expect(amoxicillin.referenceMatchStatus).toBe("VERIFIED_MATCH");
-      expect(amoxicillin.medicineReferenceId).toBeTruthy();
+      // The (synthetic) dev seed holds "Amoxicillin 500 mg capsule", an exact
+      // match for the mock candidate. Real catalogue products with the same
+      // ingredient but another strength/form (e.g. Amoxil Forte 250 mg/5 ml
+      // suspension) may also be candidates — then nothing is auto-selected.
+      const top = amoxicillin.referenceMatchCandidates[0];
+      expect(top).toMatchObject({ genericName: "Amoxicillin", strength: "500 mg", formulation: "capsule" });
+      if (amoxicillin.referenceMatchStatus === "VERIFIED_MATCH") {
+        expect(amoxicillin.medicineReferenceId).toBe(top.id);
+      } else {
+        expect(amoxicillin.referenceMatchStatus).toBe("MULTIPLE_MATCHES");
+        expect(amoxicillin.medicineReferenceId).toBeNull();
+      }
     });
   });
 

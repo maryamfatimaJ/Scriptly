@@ -55,3 +55,7 @@ export const image = asyncHandler(async (req: Request, res: Response) => {
   res.setHeader("Cache-Control", "private, max-age=86400");
   res.sendFile(filePath);
 });
+
+export const suggestions = asyncHandler(async (_req: Request, res: Response) => {
+  res.status(200).json({ suggestions: await medicineService.getSuggestions() });
+});
