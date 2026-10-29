@@ -1,7 +1,7 @@
 // Shared helper for integration tests that need an authenticated session.
 //
 // These tests run against the real app + a real Postgres database (the
-// same one `docker-compose.yml` starts for local dev — see README §2.1).
+// same one `docker-compose.yml` starts for local dev — see README "How to Run Locally").
 // That's a deliberate choice for this stage of the project: it catches
 // real Prisma/constraint issues that mocking the client would hide, at
 // the cost of needing a live DB to run `npm test`. Each test registers

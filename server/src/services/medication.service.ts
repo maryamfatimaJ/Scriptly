@@ -297,7 +297,7 @@ export async function listMedicationsForUser(userId: string) {
       // Lets the frontend tell "already has an active/paused schedule"
       // apart from "never scheduled" without a second round-trip — used
       // to stop offering "set up reminders" for a medication that's
-      // already on one (previously a known gap, see README history).
+      // already on one (previously a known gap).
       schedules: { select: { id: true, status: true } },
     },
     // Tie-broken on id — medications from one extraction share a createdAt.

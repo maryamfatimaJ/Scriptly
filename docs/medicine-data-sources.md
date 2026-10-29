@@ -314,7 +314,7 @@ addl-directormis@dra.gov.pk). drugsinfo.pk via drugsinfo.pk/contact.
 medira.pk via support@medira.pk.
 
 **Decision: nothing imported.** The catalogue code, importers and coverage
-report are in place (README §4.3); records arrive when the project owner
+report are in place (`server/scripts/`); records arrive when the project owner
 chooses a source and, where needed, holds written permission.
 
 
