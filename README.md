@@ -24,7 +24,7 @@ Built for **Hacktoberfest Hack Day with MLH × Zeppelin Labs × DEV**.
 |---|---|
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, TanStack Query, React Router, React Hook Form + Zod, Three.js (react-three-fiber) for the landing hero |
 | Backend | Node.js, Express, TypeScript, Prisma, PostgreSQL 16 (Docker), Zod, sharp |
-| AI | Google Gemini API (prescription reading), Anthropic Claude API via `@anthropic-ai/sdk` (Scripty; optional fallback reader) |
+| AI | Google Gemini API (prescription reading; Gemma 4 optional), Anthropic Claude API via `@anthropic-ai/sdk` (Scripty; optional fallback reader) |
 | Data | DRAP PharmaPrice Index (19 verified products), openFDA drug-label API |
 | Testing | Vitest, Supertest |
 
@@ -33,6 +33,7 @@ Built for **Hacktoberfest Hack Day with MLH × Zeppelin Labs × DEV**.
 **Reading prescriptions (Google Gemini).**
 1. The server checks the upload is a real image, applies its EXIF rotation and downsizes it.
 2. It sends the image to Gemini (`gemini-3.5-flash` by default) with instructions written for Pakistani prescriptions, asking for JSON only.
+   **Optional: Gemma 4.** Gemini is the main reader. The open-weight Gemma 4 model can be used instead, through the same Google API key, by setting `GOOGLE_MODEL=gemma-4-31b-it` (or `gemma-4-26b-a4b-it`). It is slower than Gemini (about 110 s per prescription in our testing).
 3. For every medicine the model reports each field — name, active ingredient, strength, form, dose, frequency, timing, duration, quantity, instructions — with a confidence and whether it was **read**, **unclear**, **not written**, or (for the active ingredient of a clearly written brand only) **inferred**. The server discards any other inferred value and adds warnings for low-confidence fields.
 4. Failures are reported honestly (quota used up, service busy, bad credentials) and can be retried. If `AI_FALLBACK_PROVIDER` is set (e.g. `anthropic`), Claude reads the image when Gemini is out of quota or unavailable.
 
@@ -78,7 +79,7 @@ CSRF_SECRET=<random-string>
 
 AI_PROVIDER=google
 GOOGLE_API_KEY=<your-google-ai-studio-key>      # https://aistudio.google.com/apikey
-GOOGLE_MODEL=gemini-3.5-flash
+GOOGLE_MODEL=gemini-3.5-flash                   # optional: gemma-4-31b-it (Gemma 4, slower)
 AI_FALLBACK_PROVIDER=                           # optional: anthropic
 
 ANTHROPIC_API_KEY=<your-anthropic-api-key>      # Scripty — https://console.anthropic.com/settings/keys
