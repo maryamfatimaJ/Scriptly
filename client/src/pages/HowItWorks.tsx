@@ -2,35 +2,34 @@ import { clsx } from "clsx";
 import { HeroPhoto } from "@/components/HeroPhoto";
 import { Disclaimer } from "@/components/Disclaimer";
 
-// Step photos: free to use under the Unsplash License (unsplash.com/license).
-// To replace one, change its `image.src` — a /images/... file in
-// client/public/images or another licensed URL. The frame crops to 4:3.
+// Step photos. To replace one, change its `image.src` — a /images/... file
+// in client/public/images or another licensed URL. The frame crops to 4:3.
 const STEPS = [
   {
     number: "01",
     title: "Capture",
     copy:
       "Photograph your prescription in good light, or upload an existing image or PDF. We check focus and framing before you move on, so nothing illegible slips through.",
-    // Default stock photo (see HeroPhoto.tsx): blister packs of medicine.
-    image: undefined,
+    // Project image: client/public/images/how-it-works-capture.jpg
+    image: {
+      src: "/images/how-it-works-capture.jpg",
+      alt: "A blank prescription pad marked Rx beside colourful capsules",
+    },
   },
   {
     number: "02",
     title: "Review",
     copy:
       "Candidate medication names, strengths, and instructions are extracted for you to check against the original — side by side, field by field. Anything uncertain is flagged, never guessed.",
-    // "Woman Consults with Pharmacist" — National Cancer Institute (photographer Rhoda Baer), Unsplash.
-    image: {
-      src: "https://images.unsplash.com/photo-1576091358783-a212ec293ff3?auto=format&fit=crop&w=900&q=80",
-      alt: "A pharmacist explaining a prescription bottle to a patient at the pharmacy counter",
-    },
+    // Default stock photo (see HeroPhoto.tsx): blister packs of medicine, Unsplash.
+    image: undefined,
   },
   {
     number: "03",
     title: "Organize",
     copy:
       "Once you confirm a medication's instructions, it becomes part of your schedule: daily reminders, a taken/missed record, and a single place to see every active prescription.",
-    // "Young woman taking medicine from a pill box" — Towfiqu barbhuiya, Unsplash.
+    // "Young woman taking medicine from a pill box" — Towfiqu barbhuiya, Unsplash License.
     image: {
       src: "https://images.unsplash.com/photo-1624711076872-ecdbc5ade023?auto=format&fit=crop&w=900&q=80",
       alt: "A hand taking a tablet from a weekly pill organizer",
