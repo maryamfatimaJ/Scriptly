@@ -8,7 +8,18 @@ import { cn } from "@/lib/cn";
 const PLACEHOLDER_SRC =
   "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=900&q=80";
 
-export function HeroPhoto({ className }: { className?: string }) {
+const PLACEHOLDER_ALT = "A paper prescription beside medicine packaging, photographed in natural daylight";
+
+export function HeroPhoto({
+  className,
+  src = PLACEHOLDER_SRC,
+  alt = PLACEHOLDER_ALT,
+}: {
+  className?: string;
+  /** Image URL; defaults to the stock placeholder above. */
+  src?: string;
+  alt?: string;
+}) {
   const [failed, setFailed] = useState(false);
 
   if (failed) {
@@ -21,15 +32,15 @@ export function HeroPhoto({ className }: { className?: string }) {
           className
         )}
         role="img"
-        aria-label="Prescription paper and medicine packaging in natural daylight"
+        aria-label={alt}
       />
     );
   }
 
   return (
     <img
-      src={PLACEHOLDER_SRC}
-      alt="A paper prescription beside medicine packaging, photographed in natural daylight"
+      src={src}
+      alt={alt}
       className={cn("object-cover", className)}
       onError={() => setFailed(true)}
       loading="eager"
