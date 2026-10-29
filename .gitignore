@@ -1,0 +1,35 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.local
+
+# Uploaded prescription images must never be committed.
+server/uploads/
+
+# Logs
+npm-debug.log*
+*.log
+
+# OS / editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+
+# Prisma
+server/prisma/dev.db
+
+
+# Vite
+client/.vite/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Environment files (any directory). Only .env.example is committed.
+.env.*
+!.env.example
+
+# Output of the live extraction test script.
+results-*.json

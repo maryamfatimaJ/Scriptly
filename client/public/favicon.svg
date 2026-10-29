@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The capsule motif: two contrasting halves, matching the brand
+       system in tailwind.config.ts (forest #0A5C92 / surface #F3F8FC),
+       which is itself derived from the 3D capsule in the homepage hero. -->
+  <rect width="32" height="32" rx="7" fill="#0A5C92"/>
+  <g transform="rotate(-45 16 16)">
+    <rect x="10" y="5" width="12" height="22" rx="6" fill="#F3F8FC"/>
+    <path d="M10 16h12v5a6 6 0 0 1-6 6 6 6 0 0 1-6-6z" fill="#8FC4E6"/>
+  </g>
+</svg>

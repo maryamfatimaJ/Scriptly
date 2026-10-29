@@ -1,0 +1,215 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   DESIGN TOKENS — the single source of truth
+   ---------------------------------------------------------------------------
+   Every colour and the typeface are defined ONCE, here. Tailwind's theme
+   (tailwind.config.ts), the 3D hero's stylesheet (hero3d.css) and the SVG
+   capsule mark (CapsuleMotif.tsx) all read these variables rather than
+   holding their own copies. Before this, the hero carried hardcoded blues
+   while the rest of the site read Tailwind's tokens, so the two could —
+   and did — drift apart.
+
+   Colours are stored as bare RGB channels ("10 92 146"), not hex, so that
+   Tailwind's opacity modifiers (bg-forest/40) keep working through
+   `rgb(var(--x) / <alpha-value>)`.
+
+   The palette is derived from the 3D capsule in the homepage hero, so the
+   page and its one large object share a light. Contrast-checked: the
+   lowest text pairing is muted-on-wash at 4.65:1 (WCAG AA is 4.5).
+
+   Two values cannot read these variables and are duplicated deliberately:
+   the pre-paint script in index.html (it runs before any CSS loads) and
+   public/favicon.svg (a static file). Change them alongside these.
+--------------------------------------------------------------------------- */
+:root {
+  /* Brand roles. The Tailwind names (forest, mint, sage...) are historical
+     and predate the blue palette — read them as the roles on the right. */
+  --sc-primary: 10 92 146; /* #0A5C92  forest   — buttons, links, dark band */
+  --sc-surface: 246 250 253; /* #F6FAFD  offwhite — the page */
+  --sc-wash: 227 242 251; /* #E3F2FB  mint     — soft tinted surfaces */
+  --sc-accent: 143 196 230; /* #8FC4E6  sage     — numerals, quiet accents */
+  --sc-ink: 15 46 69; /* #0F2E45  charcoal — text */
+  --sc-muted: 86 110 130; /* #566E82  gray     — secondary text */
+
+  /* The capsule's own light, taken from CapsuleScene.tsx's materials and
+     lights. Used for the hero's halo, orbit rings and fallback capsule. */
+  --sc-capsule: 23 140 226; /* #178CE2  blue half material */
+  --sc-capsule-light: 104 195 255; /* #68C3FF  rim point light */
+  --sc-capsule-glow: 210 241 255; /* #D2F1FF  sky/halo tint */
+  --sc-capsule-shadow: 29 93 136; /* #1D5D88  contact shadow */
+
+  --sc-font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--sc-font-sans);
+    /* Lining (cap-height) figures, so dose times and prices sit level
+       with the capitals around them rather than dropping below. */
+    font-variant-numeric: lining-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Headings default to the reference's calm register: regular weight,
+     tight tracking. The roles below (.t-display, .t-h2) refine this. */
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--sc-font-sans);
+    font-weight: 450;
+    letter-spacing: -0.02em;
+  }
+
+  /* Thin, deliberate dividers rather than heavy borders/shadows. */
+  .hairline {
+    border-color: theme("colors.charcoal / 12%");
+  }
+}
+
+@layer utilities {
+  .capsule-mask {
+    border-radius: 999px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   TYPE SYSTEM
+   ---------------------------------------------------------------------------
+   One class per ROLE, not per size. The point is that an eyebrow, a nav
+   label, a section heading and a caption are different things with
+   different jobs — previously they were all near-identical small grey
+   text, which is what made the pages read as generic.
+
+   ONE typeface: Geist, a geometric grotesque, across every role.
+
+   With a single family, hierarchy has to come from somewhere other than
+   a serif/sans contrast — so it comes from scale, weight and tracking,
+   deliberately and in that order:
+     - scale   11px eyebrow -> 100px display is a ~9x range
+     - weight  400 display/body, 450 section headings, 600 sub-headings,
+               650 eyebrow — the large roles are the LIGHT ones, as in the
+               reference, so size does the shouting and weight stays calm
+     - tracking +0.2em on the eyebrow down to -0.035em on the display
+
+   Optical tracking matters more here than with a serif: a geometric
+   grotesque set at 100px with default spacing reads loose and cheap.
+   Every display role below carries negative tracking for that reason.
+--------------------------------------------------------------------------- */
+@layer components {
+  /* Small uppercase announcement above a headline. Rare — at most one
+     per section, or it stops meaning anything. */
+  .t-eyebrow {
+    /* /70, not /55: at 11px the lighter value measured 3.42:1, under the
+       4.5:1 AA floor. */
+    @apply text-charcoal/70;
+    font-family: var(--sc-font-sans);
+    font-size: 0.6875rem;
+    font-weight: 650;
+    line-height: 1.2;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  /* Hero headline. Fluid, and tight enough that multiple lines read as
+     one mass rather than a stack of separate sentences. */
+  .t-display {
+    font-family: var(--sc-font-sans);
+    font-size: clamp(2.75rem, 8.2vw, 6.25rem);
+    /* Regular, as in the reference headline: at 100px a heavier weight
+       reads as shouting. Scale alone makes it the dominant element. */
+    font-weight: 400;
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+  }
+
+  /* Section headings. Noticeably smaller than .t-display — the hierarchy
+     between "the one headline" and "a heading" has to be unmistakable. */
+  .t-h2 {
+    font-family: var(--sc-font-sans);
+    font-size: clamp(1.75rem, 3.4vw, 2.75rem);
+    font-weight: 450;
+    line-height: 1.08;
+    letter-spacing: -0.028em;
+  }
+
+  /* Sub-headings inside a section. Carried by weight, since it can no
+     longer be distinguished from .t-h2 by switching family. */
+  .t-h3 {
+    font-family: var(--sc-font-sans);
+    /* 16px against .t-lead's 18-20px and .t-body's 15px. Previously all
+       three sat within 2px of each other, so a step heading barely
+       asserted itself over its own paragraph. Weight carries the rest. */
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+
+  /* The one paragraph directly under a headline. Larger and lighter in
+     colour than body copy — it is a bridge, not a block of reading. */
+  .t-lead {
+    font-size: clamp(1.125rem, 1.5vw, 1.25rem);
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    @apply text-charcoal/70;
+  }
+
+  /* Ordinary reading copy. */
+  .t-body {
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    @apply text-charcoal/75;
+  }
+
+  /* Captions, timestamps, source attribution, legal. Small but never
+     smaller than 12px, and never the same colour as body copy. */
+  .t-meta {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+    @apply text-gray;
+  }
+
+  /* Navigation and other interface labels. */
+  .t-nav {
+    font-size: 0.875rem;
+    font-weight: 450;
+    line-height: 1;
+    letter-spacing: -0.005em;
+  }
+
+  /* A number or short string used as a graphic element (step markers,
+     counts). Tabular so columns of them align. */
+  .t-numeral {
+    font-family: var(--sc-font-sans);
+    font-size: clamp(2.5rem, 5vw, 3.75rem);
+    font-weight: 500;
+    line-height: 0.9;
+    letter-spacing: -0.035em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .field {
+    @apply rounded-xl border border-charcoal/15 bg-offwhite px-4 py-2.5 text-charcoal placeholder:text-gray/70 focus:border-forest focus:outline-none focus:ring-1 focus:ring-forest;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

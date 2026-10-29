@@ -1,0 +1,36 @@
+# Local PostgreSQL for development. The app (client/server) still runs
+# directly on your machine with `npm run dev`; this just gives it a
+# database to talk to without installing Postgres natively.
+#
+# `name` is pinned explicitly: Compose otherwise derives the project name
+# (and therefore the volume/container names) from the folder name, so
+# renaming the folder would silently point the app at a brand-new, empty
+# database while the old one lingered as an orphaned volume. Pinning it
+# keeps the data tied to the project, not to wherever the folder happens
+# to live.
+name: scriptly
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: prescription_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: prescription_db
+    ports:
+      # Host port 5433, not 5432: a native PostgreSQL install on the host
+      # commonly already owns 5432. The container's internal port stays
+      # 5432 — only the host-side mapping changes.
+      - "5433:5432"
+    volumes:
+      - prescription_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  prescription_db_data:

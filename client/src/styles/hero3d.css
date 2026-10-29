@@ -1,0 +1,356 @@
+/* ---------------------------------------------------------------------------
+   3D capsule hero — scoped styles
+   ---------------------------------------------------------------------------
+   Extracted from the supplied `hero_Section/src/index.css` (916 lines), which
+   styled a complete reference landing page. Only the rules belonging to the
+   hero's capsule composition are kept; everything for the reference navbar,
+   trust bar, rating/avatar row, info chips and the "explore the capsule"
+   control is deliberately absent, because those elements are not in Scriptly.
+
+   EVERY selector below is nested under `.sc-hero`. That is not tidiness —
+   the original stylesheet set rules on bare `body`, `html`, `.button`,
+   `.eyebrow` and similar. Imported globally those would have reached
+   Scriptly's navbar, the sections under the hero, and every secondary page.
+   Nothing here may be written as a bare element or generic class selector.
+
+   Scriptly's own tokens (offwhite/forest/charcoal) and type classes
+   (.t-display, .t-lead, .t-eyebrow) carry the copy. The blue in here belongs
+   to the supplied capsule's lighting environment — halo, orbit rings and the
+   WebGL fallback — and is kept so the 3D object sits in the light it was
+   authored for.
+--------------------------------------------------------------------------- */
+
+.sc-hero {
+  /* Height of Scriptly's sticky navbar: py-5 (2.5rem) around a 2.5rem
+     button row. The hero is sized to the viewport MINUS this, so the
+     navbar and hero together fill exactly one screen. If the navbar's
+     padding changes, change this with it. */
+  --sc-nav-h: 5rem;
+
+  position: relative;
+  isolation: isolate;
+  /* Contains the canvas, which bleeds 80px past its column, and the
+     rotated orbit ring, whose box hung ~40px below the hero on stacked
+     layouts and showed through the next section. The supplied page did
+     this with a `.site-shell` wrapper that was not carried over. `clip`
+     (not `hidden`) so this is not a scroll container; the `hidden` line
+     before it is the fallback for older browsers. */
+  overflow: hidden;
+  overflow: clip;
+  /* Scriptly's surface is the base so the hero meets the section below
+     it without a seam; the supplied blue radial is kept as the capsule's
+     ambient light source. Now that the palette is derived from the
+     capsule, the two agree rather than merely coexisting. */
+  background-color: rgb(var(--sc-surface));
+  background-image:
+    radial-gradient(circle at 84% 22%, rgb(var(--sc-capsule-glow) / 0.55), transparent 32%),
+    linear-gradient(120deg, rgb(var(--sc-surface)) 0%, rgb(var(--sc-surface)) 46%, rgb(var(--sc-wash) / 0.6) 100%);
+}
+
+.sc-hero__inner {
+  position: relative;
+  z-index: 3;
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 0.92fr 1.08fr;
+  align-items: center;
+  /* One screen below the navbar, bounded both ways:
+       - floor 560px, so a short laptop (1280x650) still gets a capsule
+         stage large enough to read, rather than a squashed one;
+       - ceiling 980px, so a tall portrait monitor does not produce a
+         cavernous hero with the copy floating in empty space.
+     Previously a fixed 620px, which at 1280x800 left ~100px of the next
+     section visible above the fold. */
+  min-height: clamp(560px, calc(100svh - var(--sc-nav-h)), 980px);
+}
+
+.sc-hero__copy {
+  position: relative;
+  z-index: 5;
+  /* Symmetric so the copy centres on the same line as the capsule; the
+     old 56/64 split sat the text visibly high of the object beside it. */
+  padding: clamp(40px, 6svh, 72px) 0;
+}
+
+/* --- The capsule stage -------------------------------------------------- */
+
+.sc-hero__visual {
+  position: relative;
+  /* Stretches to the full hero height, so the canvas — and therefore the
+     camera-centred capsule — is centred on the same axis as the copy.
+     A fixed height bottom-aligned here (as before) put the capsule's
+     centre below the text's centre whenever the hero grew. */
+  align-self: stretch;
+  min-height: 460px;
+}
+
+.sc-hero__canvas {
+  position: absolute;
+  z-index: 4;
+  left: -10px;
+  right: -80px;
+  /* FIXED height, centred — deliberately not stretched with the column.
+     The camera has a fixed vertical field of view, so the canvas HEIGHT
+     sets how big the capsule is, and its aspect sets how much of the
+     scene is visible side to side. Stretching it to the full hero (as an
+     earlier revision did) drew the capsule ~25% larger AND narrowed the
+     visible width from 6.3 to 5.0 world units — less than the 5.5 the
+     opened capsule needs, so its halves were cut off when it opened.
+     560px is the supplied implementation's original canvas height
+     (580px stage, 20px top inset): the size at which the opening fits
+     with margin. The column still stretches; only this box is fixed. */
+  top: calc(50% - 280px);
+  height: 560px;
+  cursor: pointer;
+}
+
+.sc-hero__canvas canvas {
+  outline: none;
+}
+
+.sc-hero__halo {
+  position: absolute;
+  z-index: 0;
+  left: 48%;
+  top: 48%;
+  width: 470px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.95) 0 36%,
+    rgb(var(--sc-capsule-glow) / 0.55) 64%,
+    transparent 72%
+  );
+  transform: translate(-50%, -50%);
+  filter: blur(1px);
+}
+
+.sc-hero__orbit {
+  position: absolute;
+  z-index: 1;
+  left: 49%;
+  top: 48%;
+  aspect-ratio: 1;
+  border: 1px solid rgb(var(--sc-capsule-light) / 0.3);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) rotate(-16deg);
+}
+
+.sc-hero__orbit--large {
+  width: 475px;
+}
+
+.sc-hero__orbit--small {
+  width: 345px;
+  border-style: dashed;
+  opacity: 0.8;
+}
+
+.sc-hero__dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: rgb(var(--sc-capsule));
+  box-shadow: 0 2px 8px rgb(var(--sc-capsule) / 0.25);
+}
+
+.sc-hero__dot--one {
+  top: 12%;
+  left: 19%;
+}
+
+.sc-hero__dot--two {
+  right: 7%;
+  bottom: 27%;
+}
+
+/* --- Ambient background detail ------------------------------------------ */
+
+.sc-hero__ambient {
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  background: rgb(var(--sc-capsule-light) / 0.18);
+  filter: blur(1px);
+}
+
+.sc-hero__ambient--one {
+  top: 17%;
+  left: -52px;
+  width: 110px;
+  height: 110px;
+}
+
+.sc-hero__ambient--two {
+  right: 6%;
+  bottom: 3%;
+  width: 48px;
+  height: 48px;
+}
+
+.sc-hero__grid {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  opacity: 0.33;
+  background-image: radial-gradient(rgb(var(--sc-capsule-light) / 0.18) 0.7px, transparent 0.7px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(to right, transparent 35%, black 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 35%, black 100%);
+}
+
+/* --- No-WebGL fallback -------------------------------------------------- */
+
+.sc-hero__fallback {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(430px, 80vw);
+  aspect-ratio: 430 / 142;
+  display: flex;
+  transform: translate(-50%, -50%) rotate(-10deg);
+  filter: drop-shadow(0 25px 22px rgb(var(--sc-capsule-shadow) / 0.2));
+}
+
+.sc-hero__fallback-half {
+  width: 50%;
+  height: 100%;
+}
+
+.sc-hero__fallback-half--blue {
+  border-radius: 80px 3px 3px 80px;
+  background: linear-gradient(150deg, rgb(var(--sc-capsule-light)), rgb(var(--sc-capsule)) 55%, rgb(var(--sc-capsule-shadow)));
+}
+
+.sc-hero__fallback-half--white {
+  border-radius: 3px 80px 80px 3px;
+  background: linear-gradient(150deg, #ffffff, rgb(var(--sc-surface)) 60%, rgb(var(--sc-wash)));
+}
+
+/* --- Responsive --------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  .sc-hero__inner {
+    grid-template-columns: 0.95fr 1.05fr;
+  }
+
+  .sc-hero__canvas {
+    inset-inline: -70px;
+    /* Original stage at this width was 520px (500px canvas). */
+    top: calc(50% - 250px);
+    height: 500px;
+  }
+}
+
+@media (max-width: 860px) {
+  .sc-hero__inner {
+    width: min(100% - 32px, 640px);
+    min-height: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .sc-hero__copy {
+    padding: 44px 0 8px;
+    text-align: center;
+  }
+
+  /* Keep the L-rule + lead paragraph and the CTA row centred with the
+     headline once the layout stacks. */
+  .sc-hero__copy .sc-hero__lead-row,
+  .sc-hero__copy .sc-hero__actions {
+    justify-content: center;
+  }
+
+  /* Stacked layouts take their natural height. Forcing a full screen
+     here would push either the copy or the capsule below the fold on a
+     phone, which is worse than a little of the next section showing. */
+  .sc-hero__visual {
+    height: 420px;
+    min-height: 0;
+    align-self: auto;
+  }
+
+  .sc-hero__canvas {
+    inset: -20px -70px 0;
+    /* Undo the desktop fixed height — here the stage itself is a fixed
+       420px, exactly as in the supplied implementation. */
+    height: auto;
+  }
+
+  .sc-hero__halo {
+    width: min(430px, 94vw);
+  }
+
+  .sc-hero__orbit--large {
+    width: min(420px, 92vw);
+  }
+
+  .sc-hero__orbit--small {
+    width: min(310px, 72vw);
+  }
+
+  .sc-hero__grid {
+    mask-image: linear-gradient(to bottom, transparent 10%, black 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 10%, black 100%);
+  }
+}
+
+@media (max-width: 480px) {
+  .sc-hero__copy {
+    padding-top: 34px;
+  }
+
+  .sc-hero__visual {
+    /* Short enough that the section below stays reachable without a long
+       scroll past empty space. */
+    height: 340px;
+  }
+
+  .sc-hero__canvas {
+    inset: -10px -56px 0;
+  }
+
+  .sc-hero__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Short desktop screens (e.g. 1366x660 laptops). The two-column hero
+   fills the viewport, so its contents must fit inside it rather than
+   overflow it. The headline scales with viewport HEIGHT as well as
+   width here; at 800px tall and above the 100px cap still applies, so
+   this changes nothing on a normal desktop. Scoped to the hero — the
+   global .t-display role is untouched. */
+@media (min-width: 861px) {
+  .sc-hero .t-display {
+    font-size: clamp(2.75rem, min(8.2vw, 13svh), 6.25rem);
+  }
+}
+
+@media (min-width: 861px) and (max-height: 700px) {
+  .sc-hero__copy .sc-hero__lead-row {
+    margin-top: 1.75rem;
+  }
+
+  .sc-hero__copy .sc-hero__actions {
+    margin-top: 1.75rem;
+  }
+}
+
+/* The capsule's own GSAP/useFrame motion is gated in CapsuleScene.tsx,
+   which reads prefers-reduced-motion directly. This only covers the CSS
+   side, and is scoped so it cannot override motion rules elsewhere. */
+@media (prefers-reduced-motion: reduce) {
+  .sc-hero *,
+  .sc-hero *::before,
+  .sc-hero *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

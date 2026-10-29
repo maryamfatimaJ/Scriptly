@@ -1,0 +1,592 @@
+// Prisma schema for the prescription management application.
+//
+// Design principles enforced by this schema:
+// 1. Medicine reference data (general knowledge about a drug) is kept
+//    strictly separate from medication data extracted from a specific
+//    prescription. A reference lookup may *suggest* values but must never
+//    silently overwrite what was extracted from, or confirmed on, a
+//    user's actual prescription.
+// 2. Every medication carries an explicit reviewStatus. Schedules and
+//    reminders may only be created once a medication's instructions are
+//    CONFIRMED (enforced in the service layer, see schedule.service.ts).
+// 3. Prescription images and medical data are scoped to a single owning
+//    user; no table here is designed to be queried without a userId/
+//    ownership filter.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users & auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  // IANA timezone name (e.g. "Asia/Karachi"), defaulting to UTC until the
+  // user sets it in Account settings. Schedule/reminder times are always
+  // computed in this timezone (via Luxon), never the server's own local
+  // time — see schedule.service.ts.
+  timezone     String   @default("UTC")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  prescriptions Prescription[]
+  medications   Medication[]        @relation("MedicationConfirmedBy")
+  schedules     Schedule[]
+  sessions      Session[]
+  events        PrescriptionEvent[]
+
+  @@map("users")
+}
+
+// Server-side record of an issued refresh token, so logout / "sign out
+// everywhere" can actually revoke a session instead of just deleting a
+// client-side cookie.
+model Session {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Prescriptions
+// ---------------------------------------------------------------------------
+
+enum PrescriptionStatus {
+  UPLOADED
+  EXTRACTING
+  EXTRACTED
+  APPROVED
+  REJECTED
+  NEEDS_CLARIFICATION
+}
+
+model Prescription {
+  id               String             @id @default(uuid())
+  userId           String
+  imagePath        String // path on disk / object storage key, never served directly
+  originalFilename String
+  mimeType         String
+  fileSizeBytes    Int
+  status           PrescriptionStatus @default(UPLOADED)
+  extractionError  String? // last extraction failure message, if any
+  aiProvider       String? // which extraction provider produced the candidates (e.g. "mock", "gemma")
+
+  // Prescription-wide extraction assessment (distinct from any single
+  // medication's confidence/warnings below) — e.g. "image partially
+  // illegible", an overall confidence across all candidates. Never a
+  // claim of medical correctness, just a signal for the review UI.
+  extractionOverallConfidence Float?
+  extractionOverallWarnings   Json? // ExtractionWarning[]
+  extractionAttempts          Int    @default(0) // how many times /extract has run — see prescription.service.ts retry guard
+  // The model's own assessment of how readable the page was:
+  // "GOOD" | "PARTIAL" | "POOR". A signal for the review UI only.
+  extractionLegibility        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medications Medication[]
+  events      PrescriptionEvent[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("prescriptions")
+}
+
+// ---------------------------------------------------------------------------
+// Medications (per-prescription, extracted + reviewed)
+// ---------------------------------------------------------------------------
+
+enum MedicationReviewStatus {
+  NEEDS_REVIEW
+  CONFIRMED
+  NEEDS_CLARIFICATION
+  REJECTED
+}
+
+// Result of matching an extracted medication candidate against
+// medicine_reference. A name match alone is never enough to reach
+// VERIFIED_MATCH — strength and formulation must agree too (see
+// medicineMatching.service.ts). NOT_EVALUATED means matching hasn't run
+// yet (e.g. extraction failed before reaching that step).
+enum MedicineMatchStatus {
+  NOT_EVALUATED
+  VERIFIED_MATCH
+  POSSIBLE_MATCH
+  MULTIPLE_MATCHES
+  NO_VERIFIED_RECORD
+}
+
+// Where a medication record came from. MANUAL rows are typed in by the
+// user themselves (no prescription image), so the user IS the confirming
+// reviewer and there are no AI-extracted values to compare against.
+enum MedicationSource {
+  PRESCRIPTION
+  MANUAL
+}
+
+model Medication {
+  id             String           @id @default(uuid())
+  prescriptionId String? // null only for MANUAL medications
+  userId         String // denormalized for fast ownership checks
+  source         MedicationSource @default(PRESCRIPTION)
+
+  // --- AI-extracted candidate values (never mutated after extraction) ---
+  extractedName               String?
+  extractedBrand              String? // brand/trade name, if the prescription names one specifically
+  extractedGenericName        String? // generic/INN name, if distinguishable from the brand at extraction time
+  extractedStrength           String?
+  extractedForm               String?
+  extractedRoute              String? // route of administration, e.g. "oral", "topical" — never inferred if not legible
+  extractedDosageInstructions String? // full human-readable instruction, e.g. "Take one capsule by mouth three times daily after meals"
+  extractedInstructions       String? // special/precautionary instructions distinct from dosing, e.g. "avoid alcohol"
+  extractedFrequency          String?
+  extractedDurationDays       Int?
+  extractedTiming             String? // relation to meals / time of day as WRITTEN, e.g. "after breakfast and dinner"
+  extractedQuantity           String? // quantity to dispense as written, e.g. "10 tablets"
+  extractionFieldSource       Json? // Record<fieldName, "READ"|"UNCERTAIN"|"NOT_VISIBLE"|"INFERRED"> — see extraction/types.ts
+  extractionConfidence        Float? // 0..1 overall confidence for this candidate, null if unsupported
+  extractionFieldConfidence   Json? // Record<fieldName, 0..1> — per-field confidence, see extraction/types.ts
+  extractionWarnings          Json? // ExtractionWarning[] specific to THIS medication (not the whole prescription)
+
+  // --- Human-confirmed values (what schedules are actually built from) ---
+  confirmedName               String?
+  confirmedBrand              String?
+  confirmedGenericName        String?
+  confirmedStrength           String?
+  confirmedForm               String?
+  confirmedRoute              String?
+  confirmedDosageInstructions String?
+  confirmedInstructions       String?
+  confirmedFrequency          String?
+  confirmedDurationDays       Int?
+  confirmedTiming             String?
+  confirmedQuantity           String?
+
+  reviewStatus  MedicationReviewStatus @default(NEEDS_REVIEW)
+  reviewNotes   String?
+  confirmedById String?
+  confirmedAt   DateTime?
+
+  // Optional, non-authoritative link to a general medicine reference
+  // record. This is purely informational (e.g. to show manufacturer /
+  // reference price alongside the prescription) and must never be used
+  // to overwrite extracted or confirmed prescription data. The user (not
+  // the matcher) makes the final choice whenever more than one candidate
+  // is plausible — see medicineMatching.service.ts.
+  medicineReferenceId      String?
+  referenceMatchStatus     MedicineMatchStatus @default(NOT_EVALUATED)
+  referenceMatchCandidates Json? // MedicineMatchCandidate[] — populated when status is POSSIBLE_MATCH or MULTIPLE_MATCHES
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  prescription      Prescription?      @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  confirmedBy       User?              @relation("MedicationConfirmedBy", fields: [confirmedById], references: [id])
+  medicineReference MedicineReference? @relation(fields: [medicineReferenceId], references: [id])
+  schedules         Schedule[]
+
+  @@index([prescriptionId])
+  @@index([userId])
+  @@index([reviewStatus])
+  @@map("medications")
+}
+
+// ---------------------------------------------------------------------------
+// Schedules & reminders
+// ---------------------------------------------------------------------------
+
+enum ScheduleStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+model Schedule {
+  id           String         @id @default(uuid())
+  medicationId String
+  userId       String
+  startDate    DateTime
+  endDate      DateTime?
+  status       ScheduleStatus @default(ACTIVE)
+  notes        String?
+  // Dose per reminder as the user confirmed it, e.g. "1 tablet". Shown in
+  // the reminder; never derived by the app.
+  doseAmount       String?
+  // ISO weekdays (1 = Monday … 7 = Sunday) on which doses are due. Empty
+  // means every day.
+  daysOfWeek       Int[]   @default([])
+  // When false, reminders are still tracked in-app (dose status) but no
+  // notification is sent for them. Recorded per delivery as
+  // SKIPPED_DISABLED, never as sent.
+  remindersEnabled Boolean @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  medication Medication     @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slots      ScheduleSlot[]
+
+  @@index([medicationId])
+  @@index([userId])
+  @@map("schedules")
+}
+
+// A recurring daily time slot, e.g. "08:00" / "Morning". Concrete,
+// dated Reminder rows are generated from these slots.
+model ScheduleSlot {
+  id         String  @id @default(uuid())
+  scheduleId String
+  timeOfDay  String // "HH:mm", 24h, local to the user for now
+  label      String? // e.g. "Morning", "With dinner"
+  // A time removed while editing a schedule is deactivated rather than
+  // deleted, so the doses already taken or missed at that time stay in
+  // the history. Inactive slots generate no new reminders.
+  active     Boolean @default(true)
+
+  schedule  Schedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  reminders Reminder[]
+
+  @@index([scheduleId])
+  @@map("schedule_slots")
+}
+
+enum ReminderStatus {
+  PENDING
+  TAKEN
+  MISSED
+  SKIPPED
+}
+
+// IMPORTANT: `status` here is the DOSE status (did the user take it),
+// never confused with whether a notification was actually delivered —
+// that's tracked separately in ReminderDelivery. A reminder can be
+// "DELIVERED" (an email went out) while still "PENDING" (dose not yet
+// marked taken), and a dose can be marked "TAKEN" even if no delivery
+// channel is configured at all (the user saw it in-app and acted).
+model Reminder {
+  id             String         @id @default(uuid())
+  scheduleSlotId String
+  scheduledFor   DateTime // the exact UTC instant this dose is due — always computed from the user's timezone at schedule-creation time, see schedule.service.ts
+  status         ReminderStatus @default(PENDING)
+  respondedAt    DateTime?
+  createdAt      DateTime       @default(now())
+
+  scheduleSlot ScheduleSlot       @relation(fields: [scheduleSlotId], references: [id], onDelete: Cascade)
+  deliveries   ReminderDelivery[]
+
+  // One dose per slot per instant. Reminder generation runs on creation,
+  // on resume, on edit and on the scheduler's rolling top-up; this
+  // constraint (with createMany skipDuplicates) is what guarantees those
+  // can overlap without ever producing a duplicate dose or notification.
+  @@unique([scheduleSlotId, scheduledFor])
+  @@index([scheduleSlotId])
+  @@index([scheduledFor])
+  @@index([status])
+  @@map("reminders")
+}
+
+enum ReminderDeliveryChannel {
+  EMAIL
+}
+
+enum ReminderDeliveryStatus {
+  PENDING // due, not yet attempted (or awaiting retry)
+  SENT // actually delivered — only ever set after the provider call succeeds
+  FAILED // gave up after REMINDER_EMAIL_MAX_ATTEMPTS — a terminal state, not retried further
+  SKIPPED_NOT_CONFIGURED // EMAIL_PROVIDER is "none" — explicitly recorded, never silently treated as sent
+  SKIPPED_DISABLED // the user turned reminders off for this schedule — recorded, not sent
+}
+
+// One row per (reminder, channel) — the @@unique below is what makes
+// delivery idempotent: the scheduler can safely re-run after a crash/
+// restart because it checks for an existing SENT row before attempting
+// again, and a FAILED/SKIPPED row is a clear, visible terminal record
+// rather than an infinite silent retry loop.
+model ReminderDelivery {
+  id            String                  @id @default(uuid())
+  reminderId    String
+  channel       ReminderDeliveryChannel
+  status        ReminderDeliveryStatus  @default(PENDING)
+  provider      String? // e.g. "smtp" — which concrete provider attempted this
+  attempts      Int                     @default(0)
+  lastAttemptAt DateTime?
+  deliveredAt   DateTime?
+  errorMessage  String? // last error, if any — never includes medical content, just the transport failure
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  reminder Reminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+
+  @@unique([reminderId, channel])
+  @@index([status])
+  @@map("reminder_deliveries")
+}
+
+// ---------------------------------------------------------------------------
+// Medicine reference data (general knowledge, independent of any user)
+// ---------------------------------------------------------------------------
+
+enum DataProvenance {
+  DRAP
+  OPENFDA
+  WHO_EML
+  RXNORM
+  MANUAL
+  OTHER
+}
+
+// Whether a stored price is a regulator-notified maximum retail price or
+// merely what some retailer listed. These must never be conflated: an
+// OFFICIAL_MRP is a legal ceiling, a RETAILER_LISTED value is an
+// observation. Rendered distinctly in the UI and by Scripty.
+enum PriceType {
+  OFFICIAL_MRP
+  RETAILER_LISTED
+}
+
+// Which regulatory market a piece of label/monograph text describes.
+// A US FDA label is NOT a Pakistani product leaflet, and the UI must
+// never present one as the other.
+enum LabelMarket {
+  US
+  PAKISTAN
+  INTERNATIONAL
+}
+
+enum VerificationStatus {
+  VERIFIED
+  UNVERIFIED
+  NEEDS_REVIEW
+}
+
+model MedicineReference {
+  id               String  @id @default(uuid())
+  genericName      String
+  brandName        String?
+  activeIngredient String
+  strength         String?
+  formulation      String? // e.g. "tablet", "syrup", "injection"
+  manufacturer     String?
+  countryOrMarket  String? // e.g. "Pakistan", "United States" — must reflect the actual source market
+  registrationId   String? // regulatory registration number, where available
+
+  // Pricing — intentionally nullable. Never fabricate a value here.
+  //
+  // A price is only meaningful alongside the pack it refers to, which is
+  // why packSize sits in this block: "Rs 2,332" means nothing until you
+  // know whether it buys one tablet or a box of 35. priceType records
+  // whether the figure is a regulator-notified ceiling or a retailer's
+  // listing, and priceEffectiveFrom is the date the SOURCE says the price
+  // took effect (distinct from priceLastVerifiedAt, which is when WE last
+  // confirmed it). All five are null together or populated together.
+  packSize            String? // e.g. "5x7's", "Pack of 10 tablets"
+  referencePrice      Decimal?   @db.Decimal(12, 2)
+  currency            String? // ISO 4217, e.g. "PKR", "USD"
+  priceType           PriceType?
+  priceSource         String?
+  priceSourceUrl      String?
+  priceEffectiveFrom  DateTime? // date the source states the price took effect
+  priceLastVerifiedAt DateTime? // when this application last confirmed it
+
+  sourceUrl          String?
+  dataProvenance     DataProvenance     @default(MANUAL)
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  lastVerifiedAt     DateTime?
+  // Synthetic rows (development seed data, automated-test fixtures) are
+  // never shown in the normal app: search, detail, matching and prices all
+  // exclude them unless CATALOGUE_INCLUDE_SYNTHETIC=true (tests only).
+  isSynthetic        Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  sources     MedicineReferenceSource[]
+  medications Medication[]
+  images      MedicineImage[]
+
+  // One row is one PACK of one product from one source: the same product
+  // in a 10-tablet and a 30-tablet pack has two prices, so pack size is
+  // part of the identity. Scoped per provenance because different sources
+  // legitimately disagree.
+  @@unique([genericName, brandName, strength, formulation, packSize, dataProvenance], name: "uniq_medicine_identity_per_source")
+  @@index([genericName])
+  @@index([brandName])
+  @@index([countryOrMarket])
+  @@index([isSynthetic])
+  // Trigram indexes (pg_trgm) back prefix, substring and misspelling
+  // search — ILIKE, ~* and similarity() all use them.
+  @@index([brandName(ops: raw("gin_trgm_ops"))], type: Gin, map: "medicine_reference_brand_trgm")
+  @@index([genericName(ops: raw("gin_trgm_ops"))], type: Gin, map: "medicine_reference_generic_trgm")
+  @@index([activeIngredient(ops: raw("gin_trgm_ops"))], type: Gin, map: "medicine_reference_ingredient_trgm")
+  @@map("medicine_reference")
+}
+
+enum MedicineImageKind {
+  PACK_BOX
+  BLISTER
+  BOTTLE
+  CONTAINER
+  FORMULATION
+  OTHER
+}
+
+// A product photograph. Shown ONLY for the exact product it was attached
+// to (scripts/importImages.ts refuses anything else), and never without
+// its source, licence and attribution. There is no generic stock image:
+// a medicine without a verified photo gets a "no image" placeholder.
+model MedicineImage {
+  id                  String            @id @default(uuid())
+  medicineReferenceId String
+  kind                MedicineImageKind
+  storagePath         String // file name inside MEDICINE_IMAGE_DIR; never a remote hotlink
+  mimeType            String
+  width               Int
+  height              Int
+  sourceName          String // e.g. "Photographed by Scriptly from a purchased pack", "GSK Pakistan press kit"
+  sourceUrl           String?
+  licence             String // e.g. "Own photograph", "Used with written permission (ref …)"
+  attribution         String // shown under the image
+  permissionBasis     String // why Scriptly may show it
+  verifiedAt          DateTime // when a person checked the photo shows THIS product, strength and form
+  createdAt           DateTime          @default(now())
+
+  medicineReference MedicineReference @relation(fields: [medicineReferenceId], references: [id], onDelete: Cascade)
+
+  @@index([medicineReferenceId])
+  @@map("medicine_images")
+}
+
+// Field-level provenance trail. A single MedicineReference row may be
+// enriched from more than one source over time (e.g. DRAP for
+// registration data, OpenFDA for interaction text); this table keeps
+// each import traceable instead of collapsing to "last write wins".
+model MedicineReferenceSource {
+  id                  String   @id @default(uuid())
+  medicineReferenceId String
+  sourceName          String // e.g. "DRAP", "OpenFDA", "WHO EML", "Manual entry"
+  sourceUrl           String?
+  fieldsProvided      Json // string[] naming which fields this source contributed
+  retrievedAt         DateTime
+  // Why Scriptly may reuse this data, e.g. "Gazette SRO — Copyright
+  // Ordinance 1962 s.57(1)(q)" or "Written permission from DRAP, ref …".
+  permissionBasis     String?
+  notes               String?
+  createdAt           DateTime @default(now())
+
+  medicineReference MedicineReference @relation(fields: [medicineReferenceId], references: [id], onDelete: Cascade)
+
+  @@index([medicineReferenceId])
+  @@map("medicine_reference_sources")
+}
+
+// Cached drug-label content, keyed by ACTIVE INGREDIENT rather than by
+// brand, because label text (what a drug is used for, its side effects)
+// is a property of the molecule, not of a particular Pakistani brand.
+// One monograph therefore serves every brand sharing that ingredient.
+//
+// Rows here are fetched on demand from a public, documented source
+// (currently openFDA, U.S. public domain) and cached — never hand-written
+// to make the UI look populated, and never bulk-imported from a source
+// whose licensing has not been confirmed. `market` is mandatory precisely
+// so the UI can state plainly that US label text is US label text.
+model MedicineMonograph {
+  id            String      @id @default(uuid())
+  // Normalized lookup key: lowercase, trimmed active ingredient.
+  ingredientKey String      @unique
+  displayName   String
+  market        LabelMarket
+
+  uses              String? // indications and usage
+  howToUse          String? // dosage and administration, as written on the label
+  sideEffects       String? // ONLY genuine adverse reactions — see openFdaClient.ts
+  whenToStop        String? // OTC "Stop use and ask a doctor if" — NOT side effects
+  warnings          String?
+  precautions       String?
+  contraindications String?
+  storage           String?
+
+  // Attribution is NOT optional: text without a source is not information
+  // we are willing to show a patient.
+  sourceName     String // e.g. "openFDA (U.S. FDA drug label)"
+  sourceUrl      String?
+  labelUpdatedAt DateTime? // the date the SOURCE label itself carries
+  retrievedAt    DateTime // when this application fetched it
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([market])
+  @@map("medicine_monographs")
+}
+
+// Records an ingredient lookup that returned NOTHING, so a miss is cached
+// too. Without this, every view of a medicine with no published label
+// re-hits the upstream API and the user waits each time for the same
+// "not found". An honest empty state deserves to be fast.
+model MonographLookupMiss {
+  ingredientKey String   @id
+  sourceName    String
+  checkedAt     DateTime
+  reason        String?
+
+  @@map("monograph_lookup_misses")
+}
+
+// ---------------------------------------------------------------------------
+// Audit trail
+// ---------------------------------------------------------------------------
+
+enum PrescriptionEventType {
+  CREATED
+  EXTRACTION_STARTED
+  EXTRACTION_COMPLETED
+  EXTRACTION_FAILED
+  EXTRACTION_RETRY_BLOCKED // a re-extraction was attempted but refused — see prescription.service.ts
+  MEDICINE_MATCHING_COMPLETED
+  APPROVED
+  REJECTED
+  CLARIFICATION_REQUESTED
+  MEDICATION_UPDATED
+  SCHEDULE_CREATED
+  SCHEDULE_STATUS_CHANGED
+  SCHEDULE_UPDATED
+  REMINDER_UPDATED
+}
+
+model PrescriptionEvent {
+  id             String                @id @default(uuid())
+  prescriptionId String
+  userId         String? // actor; null for system-generated events
+  eventType      PrescriptionEventType
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@index([prescriptionId])
+  @@index([eventType])
+  @@map("prescription_events")
+}
