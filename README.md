@@ -8,6 +8,12 @@ Built for **Hacktoberfest Hack Day with MLH × Zeppelin Labs × DEV**.
 
 > Scriptly gives general information and reminders. It does not replace a doctor or pharmacist.
 
+## Live Demo
+
+**Frontend:** https://scriptly0.vercel.app/
+
+> **Note:** this link is the **frontend only**. The backend (Express API and PostgreSQL database) is not hosted yet, so signing in, prescription scanning, medicine search and Scripty do not work on it. To use the full app, run it locally (see [How to Run Locally](#how-to-run-locally)) or watch the [demo video](Demo%20video/demo.mp4).
+
 ## Key Features
 
 - **Prescription scanning** — upload or photograph a JPG/PNG/WebP prescription. Progress is shown as it really happens (uploading → reading → ready to review), with a plain error and a retry if reading fails.
@@ -100,7 +106,7 @@ Not yet built:
 - Pakistani product leaflets for medicine information (today: U.S. FDA label text, labelled as such).
 - Urdu language support.
 - Accuracy measurement on real, consented prescription photos (testing so far used generated sample prescriptions).
-- Hosted deployment and a mobile app.
+- Hosting the backend so the live demo works end to end, and a mobile app.
 
 ## Team
 
