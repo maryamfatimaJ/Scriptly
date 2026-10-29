@@ -10,7 +10,7 @@ Built for **Hacktoberfest Hack Day with MLH × Zeppelin Labs × DEV**.
 
 ## Live Demo
 
-**Frontend:** https://scriptly0.vercel.app/
+**Frontend:** https://scriptly0-one.vercel.app/
 
 > **Note:** this link is the **frontend only**. The backend (Express API and PostgreSQL database) is not hosted yet, so signing in, prescription scanning, medicine search and Scripty do not work on it. To use the full app, run it locally (see [How to Run Locally](#how-to-run-locally)) or watch the [demo video](Demo%20video/demo.mp4).
 
