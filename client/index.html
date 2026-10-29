@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" style="background-color: #f6fafd">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,55 +7,13 @@
     <title>Scriptly</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-    <!--
-      Paint the correct background BEFORE React mounts.
-
-      Without this the browser shows its own blank white canvas during SPA
-      boot, so a first-time visitor sees white -> dark #262b2f (the capsule
-      intro) -> offwhite in under four seconds. Measured via CDP screencast
-      at ~0.5-1.7s of white in a PRODUCTION build, so this is not a dev-
-      server artifact.
-
-      The decision has to happen here, inline and synchronously, because by
-      the time any module executes the first paint has already occurred. It
-      mirrors exactly the two conditions CapsuleIntro uses to skip itself,
-      so the pre-paint colour always matches what actually renders.
-    -->
-    <script>
-      (function () {
-        var OFFWHITE = "#F6FAFD"; // matches tailwind theme.colors.offwhite
-        var INTRO_BACKDROP = "#262b2f"; // matches GIF_BACKDROP in CapsuleIntro.tsx
-        var color = OFFWHITE;
-        try {
-          var seen = window.sessionStorage.getItem("capsuleIntroShown") === "true";
-          var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-          if (!seen && !reduced) color = INTRO_BACKDROP;
-        } catch (e) {
-          // Storage can throw in private/blocked contexts — fall back to
-          // the site's own background rather than guessing dark.
-        }
-        document.documentElement.style.backgroundColor = color;
-
-        // Preload the intro ONLY when it is actually going to play.
-        // An unconditional <link rel=preload> pushed a 213KB decorative
-        // GIF onto repeat visitors and onto reduced-motion users — the
-        // two groups guaranteed never to see it.
-        if (color === INTRO_BACKDROP) {
-          var preload = document.createElement("link");
-          preload.rel = "preload";
-          preload.as = "image";
-          preload.href = "/animations/capsule-intro.gif";
-          document.head.appendChild(preload);
-        }
-      })();
-    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!--
       Loaded without blocking render. Measured in a production build, the
       Google Fonts stylesheet was completing at ~350-410ms while our own
       CSS finished at ~35ms, and first paint waited for it — which is what
-      produced the white flash before the intro's dark backdrop appeared.
+      produced a white flash before the page appeared.
       The media="print" swap is the standard trick: the browser fetches it
       at low priority and it only becomes a render-blocking screen
       stylesheet once loaded. `display=swap` means text is painted in the

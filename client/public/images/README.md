@@ -20,5 +20,4 @@ It is still bundled into `dist/` (~427 KB) simply because everything in
 replace it** — nothing in the code will break.
 
 To use a licensed hero animation later, drop it in as
-`capsule-hero.gif` and wire it into the homepage hero only. Keep it
-distinct from the intro animation in `client/public/animations/`.
+`capsule-hero.gif` and wire it into the homepage hero.
