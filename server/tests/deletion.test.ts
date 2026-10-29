@@ -101,3 +101,20 @@ describe("deleting a prescription", () => {
     expect(fs.existsSync(imagePath)).toBe(false);
   });
 });
+
+describe("saving (approving) a prescription", () => {
+  it("is idempotent: a repeated save succeeds without a second APPROVED event", async () => {
+    const { prescriptionId } = await uploadExtractAndConfirmAmoxicillin(owner);
+    const others = await prisma.medication.findMany({ where: { prescriptionId, reviewStatus: "NEEDS_REVIEW" }, select: { id: true } });
+    for (const m of others) await owner.patch(`/api/medications/${m.id}`, { reviewStatus: "REJECTED" });
+
+    const first = await owner.post(`/api/prescriptions/${prescriptionId}/approve`);
+    const second = await owner.post(`/api/prescriptions/${prescriptionId}/approve`);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body.prescription.status).toBe("APPROVED");
+    expect(await prisma.prescriptionEvent.count({ where: { prescriptionId, eventType: "APPROVED" } })).toBe(1);
+    // Another user cannot save it.
+    expect((await stranger.post(`/api/prescriptions/${prescriptionId}/approve`)).status).toBe(404);
+  });
+});

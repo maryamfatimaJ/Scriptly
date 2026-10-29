@@ -19,8 +19,11 @@ Built for **Hacktoberfest Hack Day with MLH × Zeppelin Labs × DEV**.
   (`gemini-3.5-flash`, configurable; Claude and local Gemma also supported)
   reads each medicine's name, dose, frequency, timing, duration and other
   instructions, and says when something is unclear or not written.
+- **Clear progress** — uploading, then reading, then ready to review, each
+  tied to the real request; a plain error and a retry if reading fails.
 - **Simple review** — each medicine shows what was read, with **Confirm**
-  and **Edit**. Unclear names or timing are flagged for you to check;
+  and **Edit**; a confirmed card says so and can't be resubmitted, and
+  "Medicines saved and confirmed" appears only after the server has saved. Unclear names or timing are flagged for you to check;
   nothing is guessed. Nothing is saved as confirmed until you confirm it.
 - **Reminders** — after confirming, Scriptly proposes times from what was
   written (labelled as suggestions where the paper gave none) and saves a
@@ -42,7 +45,7 @@ Built for **Hacktoberfest Hack Day with MLH × Zeppelin Labs × DEV**.
   Pakistani market (DRAP's full index is "All rights reserved" and was not
   bulk-copied). Anything else shows "Verified price unavailable" with a
   link to DRAP. Prices are DRAP **maximum retail prices**, not what a
-  pharmacy charges. No product photos yet.
+  pharmacy charges.
 - **Reminders are in-app only** unless SMTP email is configured; there are
   no push notifications.
 - Live AI tests used **generated** prescription images, not real patients'.
@@ -569,12 +572,6 @@ from **openFDA** (U.S. labelling for the ingredient, labelled as such). An
 stored details, loaded and validated on the server, including whether it is
 verified; unknown fields are passed as unknown.
 
-**Product photos** are shown only when a person has confirmed the photo shows
-that exact product, strength and form, with its source, licence and
-attribution; otherwise a "Product image unavailable" placeholder. There is no
-stock or look-alike image, and the importer refuses to attach one photo to
-two products.
-
 **Prices** are shown only for an exact product + pack match with a recorded
 source, type (official MRP vs retailer) and last-verified date; otherwise
 "Verified price unavailable" with links to check DRAP yourself.
@@ -587,11 +584,8 @@ row aborts the whole file):
   source, https URL, `permission_basis` and the date a person verified it.
   Normalizes forms ("Tab." → tablet), rejects duplicate packs, upserts per
   source and keeps a provenance row per import.
-- `npm run catalogue:images -- images.csv` — verified product photos
-  (template `docs/catalogue-images-template.csv`), re-encoded to JPEG
-  (metadata stripped) into `MEDICINE_IMAGE_DIR`.
 - `npm run catalogue:report` — real vs synthetic rows, Pakistan coverage,
-  verified prices, packs, photos and duplicate rate.
+  verified prices, packs and duplicate rate.
 
 Which sources may be used, and why most cannot yet, is in
 `docs/medicine-data-sources.md`.
@@ -630,7 +624,7 @@ with notifications off records `SKIPPED_DISABLED`, and a reminder more than
 
 ### 4.5 Still open
 
-- **Catalogue, prices and photos** are empty until a permitted source is imported (see `docs/medicine-data-sources.md`).
+- **Catalogue and prices** cover only the 19 DRAP-verified products until a permitted source for more is imported (see `docs/medicine-data-sources.md`).
 - **Push notifications** are not implemented; email requires SMTP settings.
 - **Live tests use generated test images**, not real patients'
   prescriptions. Real-world accuracy on genuinely messy handwriting should

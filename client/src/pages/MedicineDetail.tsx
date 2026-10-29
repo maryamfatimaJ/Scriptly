@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "@/api/client";
 import { Button } from "@/components/Button";
-import { ProductGallery } from "@/components/ProductImage";
 import { MonographCard, PriceCard } from "@/components/scripty/ScriptyResultCard";
 import { ScriptyChat } from "@/components/scripty/ScriptyChat";
 import * as medicinesApi from "@/api/medicines";
@@ -67,7 +66,7 @@ export function MedicineDetail() {
     );
   }
 
-  const { medicine, information, price, disclaimer, formMismatch, images, packs, sources } = data;
+  const { medicine, information, price, disclaimer, formMismatch, packs, sources } = data;
   const name = medicine.brandName ?? medicine.genericName;
   const isUsLabel = information.status === "FOUND" && information.monograph.market === "US";
 
@@ -103,10 +102,6 @@ export function MedicineDetail() {
 
       <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_1.4fr]">
         <div className="flex flex-col gap-6 lg:sticky lg:top-24 lg:self-start">
-          <section>
-            <ProductGallery images={images} name={name} />
-          </section>
-
           <section className="rounded-3xl border border-charcoal/10 p-6">
             <h2 className="font-display text-xl">Product details</h2>
             <div className="mt-4">

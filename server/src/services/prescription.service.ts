@@ -264,6 +264,9 @@ function withLegibilityWarning(result: { legibility?: string; warnings: Array<{ 
 
 export async function approvePrescription(userId: string, prescriptionId: string) {
   const prescription = await assertOwnedPrescription(userId, prescriptionId);
+  // Idempotent: a repeated save (double click, retry after a lost
+  // response) returns the saved prescription without a second event.
+  if (prescription.status === "APPROVED") return sanitizePrescription(prescription);
 
   const medicationCount = await prisma.medication.count({ where: { prescriptionId } });
   if (medicationCount === 0) {

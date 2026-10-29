@@ -1,4 +1,4 @@
-import { apiRequest, BASE_URL } from "./client";
+import { apiRequest } from "./client";
 import type { MedicineDetail, MedicineReference, PriceLookupResult } from "@/types";
 
 export interface MedicineSearchResponse {
@@ -19,10 +19,6 @@ export function searchMedicines(query: string, page = 1, pageSize = 20) {
   return apiRequest<MedicineSearchResponse>(`/medicines/search?${params.toString()}`);
 }
 
-/** Absolute URL for a catalogue image path returned by the API. */
-export function catalogueImageUrl(path: string) {
-  return `${BASE_URL}${path}`;
-}
 
 export function getMedicine(id: string) {
   return apiRequest<MedicineDetail>(`/medicines/${id}`);

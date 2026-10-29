@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -57,7 +57,16 @@ function FieldLabel({
   );
 }
 
-export function MedicationReviewCard({ medication, prescriptionId }: { medication: Medication; prescriptionId: string }) {
+export function MedicationReviewCard({
+  medication,
+  prescriptionId,
+  prescriptionApproved = false,
+}: {
+  medication: Medication;
+  prescriptionId: string;
+  /** After saving, only uncertain medicines are shown; they can still be resolved. */
+  prescriptionApproved?: boolean;
+}) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
 
@@ -87,21 +96,40 @@ export function MedicationReviewCard({ medication, prescriptionId }: { medicatio
     },
   });
 
+  // The card's status comes from the server's record only: a decision is
+  // shown as made after the save succeeded and the prescription refetched.
   const mutation = useMutation({
     mutationFn: (payload: MedicationReviewInput) => medicationsApi.updateMedication(medication.id, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["prescription", prescriptionId] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["prescription", prescriptionId] });
+      setEditing(false);
     },
   });
+  // Blocks a second submit fired before React re-renders with isPending
+  // (a fast double click), so one decision is one request.
+  const inFlight = useRef(false);
+  const [invalidHint, setInvalidHint] = useState<string | null>(null);
 
-  const reviewStatus = watch("reviewStatus");
+  const reviewStatus = medication.reviewStatus;
   const warnings = medication.extractionWarnings ?? [];
   const fieldConfidence = medication.extractionFieldConfidence;
   const fieldSources = medication.extractionFieldSource;
 
   function submitWithStatus(status: MedicationReviewInput["reviewStatus"]) {
+    if (inFlight.current || mutation.isPending) return;
+    inFlight.current = true;
+    setInvalidHint(null);
     setValue("reviewStatus", status);
-    handleSubmit((data) => mutation.mutate({ ...data, reviewStatus: status }))();
+    handleSubmit(
+      (data) => mutation.mutate({ ...data, reviewStatus: status }, { onSettled: () => (inFlight.current = false) }),
+      () => {
+        // A required field is missing (e.g. how often to take it). Open the
+        // form so the problem is visible instead of the click doing nothing.
+        inFlight.current = false;
+        setEditing(true);
+        setInvalidHint("Some details are missing. Fill in the highlighted fields, then confirm.");
+      }
+    )();
   }
 
   const name = watch("confirmedName");
@@ -182,6 +210,7 @@ export function MedicationReviewCard({ medication, prescriptionId }: { medicatio
               How often
             </FieldLabel>
             <input {...register("confirmedFrequency")} className="field" placeholder="e.g. twice a day, BD" />
+            {errors.confirmedFrequency && <span className="text-xs text-red-700">{errors.confirmedFrequency.message}</span>}
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
@@ -196,6 +225,9 @@ export function MedicationReviewCard({ medication, prescriptionId }: { medicatio
               Dose
             </FieldLabel>
             <input {...register("confirmedDosageInstructions")} className="field" placeholder="e.g. 1 tablet" />
+            {errors.confirmedDosageInstructions && (
+              <span className="text-xs text-red-700">{errors.confirmedDosageInstructions.message}</span>
+            )}
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
@@ -256,34 +288,72 @@ export function MedicationReviewCard({ medication, prescriptionId }: { medicatio
         </form>
       )}
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <Button onClick={() => submitWithStatus("CONFIRMED")} disabled={mutation.isPending || !name?.trim()}>
-          {editing ? "Save and confirm" : "Confirm"}
-        </Button>
-        <Button variant="secondary" onClick={() => setEditing((e) => !e)} disabled={mutation.isPending}>
-          {editing ? "Cancel editing" : "Edit"}
-        </Button>
-        <span className="flex flex-wrap gap-4 text-sm">
-          <button
-            type="button"
-            onClick={() => submitWithStatus("NEEDS_CLARIFICATION")}
-            disabled={mutation.isPending}
-            className="text-charcoal/70 underline-offset-2 hover:underline"
+      {decided && !editing ? (
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          <p
+            className={`text-sm font-medium ${reviewStatus === "CONFIRMED" ? "text-forest" : "text-charcoal/70"}`}
+            role="status"
           >
-            I'm not sure
-          </button>
-          <button
-            type="button"
-            onClick={() => submitWithStatus("REJECTED")}
-            disabled={mutation.isPending}
-            className="text-charcoal/70 underline-offset-2 hover:underline"
-          >
-            Not on my prescription
-          </button>
-        </span>
-      </div>
+            {reviewStatus === "CONFIRMED"
+              ? "\u2713 Confirmed"
+              : reviewStatus === "REJECTED"
+                ? "Removed \u2014 not on your prescription"
+                : "Marked as not sure \u2014 left out of reminders"}
+          </p>
+          {(!prescriptionApproved || reviewStatus === "NEEDS_CLARIFICATION") && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-sm text-forest underline-offset-2 hover:underline"
+            >
+              Change
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <Button onClick={() => submitWithStatus("CONFIRMED")} disabled={mutation.isPending || !name?.trim()}>
+            {mutation.isPending ? "Saving\u2026" : editing ? "Save and confirm" : "Confirm"}
+          </Button>
+          {(!decided || editing) && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setEditing((e) => !e);
+                setInvalidHint(null);
+              }}
+              disabled={mutation.isPending}
+            >
+              {editing ? "Cancel editing" : "Edit"}
+            </Button>
+          )}
+          <span className="flex flex-wrap gap-4 text-sm">
+            <button
+              type="button"
+              onClick={() => submitWithStatus("NEEDS_CLARIFICATION")}
+              disabled={mutation.isPending}
+              className="text-charcoal/70 underline-offset-2 hover:underline"
+            >
+              I'm not sure
+            </button>
+            <button
+              type="button"
+              onClick={() => submitWithStatus("REJECTED")}
+              disabled={mutation.isPending}
+              className="text-charcoal/70 underline-offset-2 hover:underline"
+            >
+              Not on my prescription
+            </button>
+          </span>
+        </div>
+      )}
 
-      {mutation.isError && <p className="mt-3 text-sm text-red-700">{(mutation.error as Error).message}</p>}
+      {invalidHint && <p className="mt-3 text-sm text-red-700">{invalidHint}</p>}
+      {mutation.isError && (
+        <p className="mt-3 text-sm text-red-700" role="alert">
+          Not saved: {(mutation.error as Error).message} Please try again.
+        </p>
+      )}
     </div>
   );
 }

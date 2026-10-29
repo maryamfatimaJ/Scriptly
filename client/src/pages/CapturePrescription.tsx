@@ -1,10 +1,50 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { ApiError } from "@/api/client";
 import { Button } from "@/components/Button";
 import * as prescriptionsApi from "@/api/prescriptions";
 
 type Mode = "choose" | "camera" | "preview";
+
+// Each stage is a real request: the upload, then the AI reading (one
+// server call that returns when the medicines are extracted). There is no
+// percentage because the server reports none.
+type Stage = "idle" | "uploading" | "reading" | "ready" | "upload-failed" | "read-failed";
+
+const SLOW_AFTER_MS = 25_000;
+
+function errorText(err: unknown, fallback: string) {
+  return err instanceof ApiError && err.message ? err.message : fallback;
+}
+
+function Spinner() {
+  return (
+    <span
+      className="inline-block h-4 w-4 shrink-0 rounded-full border-2 border-forest/25 border-t-forest motion-safe:animate-spin"
+      aria-hidden="true"
+    />
+  );
+}
+
+function StepRow({ state, label }: { state: "waiting" | "active" | "done"; label: string }) {
+  return (
+    <li className={`flex items-center gap-3 text-sm ${state === "waiting" ? "text-charcoal/45" : "text-charcoal"}`}>
+      {state === "active" ? (
+        <Spinner />
+      ) : (
+        <span
+          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] ${
+            state === "done" ? "bg-forest text-offwhite" : "border border-charcoal/25"
+          }`}
+          aria-hidden="true"
+        >
+          {state === "done" ? "\u2713" : ""}
+        </span>
+      )}
+      {label}
+    </li>
+  );
+}
 
 const GUIDANCE = [
   "Lay the prescription flat on a plain, well-lit surface — natural daylight works best.",
@@ -61,6 +101,22 @@ export function CapturePrescription() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [qualityWarning, setQualityWarning] = useState<string | null>(null);
 
+  const [stage, setStage] = useState<Stage>("idle");
+  const [stageError, setStageError] = useState<string | null>(null);
+  // The uploaded prescription's id: a retry after a reading failure reads
+  // the same upload again instead of creating a duplicate prescription.
+  const [uploadedId, setUploadedId] = useState<string | null>(null);
+  const [slow, setSlow] = useState(false);
+  const busyRef = useRef(false);
+  const busy = stage === "uploading" || stage === "reading" || stage === "ready";
+
+  useEffect(() => {
+    setSlow(false);
+    if (stage !== "uploading" && stage !== "reading") return;
+    const timer = setTimeout(() => setSlow(true), SLOW_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [stage]);
+
   const stopCamera = useCallback(() => {
     stream?.getTracks().forEach((track) => track.stop());
     setStream(null);
@@ -108,6 +164,9 @@ export function CapturePrescription() {
 
   function selectFile(selected: File) {
     setFile(selected);
+    setUploadedId(null);
+    setStage("idle");
+    setStageError(null);
     setPreviewUrl(URL.createObjectURL(selected));
     setMode("preview");
     setQualityWarning(null);
@@ -120,6 +179,10 @@ export function CapturePrescription() {
   }
 
   function retake() {
+    if (busyRef.current) return;
+    setUploadedId(null);
+    setStage("idle");
+    setStageError(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
     setFile(null);
@@ -127,21 +190,59 @@ export function CapturePrescription() {
     setMode("choose");
   }
 
-  const uploadMutation = useMutation({
-    mutationFn: async (toUpload: File) => {
-      const { prescription } = await prescriptionsApi.uploadPrescription(toUpload);
-      // Read it straight away. If reading fails (provider busy, quota,
-      // unreadable photo) the upload itself still succeeded, so go to the
-      // review page anyway: it shows the honest reason and a retry button.
-      try {
-        await prescriptionsApi.extractPrescription(prescription.id);
-      } catch {
-        /* surfaced on the review page */
+  async function readPrescription(id: string) {
+    setStage("reading");
+    setStageError(null);
+    try {
+      await prescriptionsApi.extractPrescription(id);
+      setStage("ready");
+      navigate(`/review/${id}`);
+    } catch (err) {
+      setStage("read-failed");
+      setStageError(errorText(err, "We couldn't read this prescription. Please try again."));
+    }
+  }
+
+  async function retryRead(id: string) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    try {
+      await readPrescription(id);
+    } finally {
+      busyRef.current = false;
+    }
+  }
+
+  async function start() {
+    if (busyRef.current || !file) return;
+    busyRef.current = true;
+    try {
+      let id = uploadedId;
+      if (!id) {
+        setStage("uploading");
+        setStageError(null);
+        try {
+          const { prescription } = await prescriptionsApi.uploadPrescription(file);
+          id = prescription.id;
+          setUploadedId(id);
+        } catch (err) {
+          setStage("upload-failed");
+          setStageError(errorText(err, "The upload didn't go through. Check your connection and try again."));
+          return;
+        }
       }
-      return prescription.id;
-    },
-    onSuccess: (id) => navigate(`/review/${id}`),
-  });
+      await readPrescription(id);
+    } finally {
+      busyRef.current = false;
+    }
+  }
+
+  const stepState = (step: "upload" | "read" | "ready"): "waiting" | "active" | "done" => {
+    const order = { upload: 0, read: 1, ready: 2 } as const;
+    const current = stage === "uploading" ? 0 : stage === "reading" ? 1 : 2;
+    if (order[step] < current) return "done";
+    return order[step] === current ? (step === "ready" ? "done" : "active") : "waiting";
+  };
 
   return (
     <div className="mx-auto max-w-content px-6 py-16 sm:py-20">
@@ -196,20 +297,50 @@ export function CapturePrescription() {
                 <p className="mt-3 text-sm text-amber-700">{qualityWarning}</p>
               )}
               <div className="mt-6 flex flex-wrap items-center gap-4">
-                <Button variant="secondary" onClick={retake} disabled={uploadMutation.isPending}>
+                <Button variant="secondary" onClick={retake} disabled={busy}>
                   Retake / replace
                 </Button>
-                <Button
-                  onClick={() => file && uploadMutation.mutate(file)}
-                  disabled={!file || uploadMutation.isPending}
-                >
-                  {uploadMutation.isPending ? "Reading your prescription…" : "Continue to review"}
-                </Button>
+                {(stage === "idle" || stage === "upload-failed") && (
+                  <Button onClick={start} disabled={!file}>
+                    {stage === "upload-failed" ? "Retry upload" : "Continue to review"}
+                  </Button>
+                )}
+                {stage === "read-failed" && uploadedId && (
+                  <Button onClick={() => retryRead(uploadedId)}>Try reading again</Button>
+                )}
               </div>
-              {uploadMutation.isError && (
-                <p className="mt-3 text-sm text-red-700">
-                  {(uploadMutation.error as Error).message || "Something went wrong. Please try again."}
-                </p>
+
+              {(busy || stage === "read-failed") && (
+                <div className="mt-6 rounded-2xl border border-charcoal/10 bg-mint/30 p-5" aria-live="polite">
+                  <ol className="flex flex-col gap-3">
+                    <StepRow state={stepState("upload")} label={stepState("upload") === "done" ? "Prescription uploaded" : "Uploading prescription\u2026"} />
+                    <StepRow
+                      state={stage === "read-failed" ? "waiting" : stepState("read")}
+                      label={stage === "read-failed" ? "Reading your prescription" : "Reading your prescription\u2026"}
+                    />
+                    <StepRow state={stage === "ready" ? "done" : "waiting"} label="Ready to review" />
+                  </ol>
+                  {slow && busy && (
+                    <p className="mt-4 text-sm text-charcoal/75">
+                      This is taking longer than usual \u2014 the AI service may be busy. Please keep this page open.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {stageError && (
+                <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900" role="alert">
+                  <p>{stageError}</p>
+                  {stage === "read-failed" && uploadedId && (
+                    <p className="mt-2">
+                      Your photo is saved. You can try reading it again, or{" "}
+                      <button type="button" onClick={() => navigate(`/review/${uploadedId}`)} className="underline underline-offset-2">
+                        open it to review later
+                      </button>
+                      .
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}

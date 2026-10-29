@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ApiError } from "@/api/client";
 import * as medicinesApi from "@/api/medicines";
-import { ProductThumbnail } from "@/components/ProductImage";
 
 // Medicine search.
 //
@@ -156,7 +155,6 @@ export function MedicineInformation() {
                       to={`/medicines/${medicine.id}`}
                       className="flex items-center gap-4 rounded-2xl border border-charcoal/10 px-5 py-4 transition hover:border-forest hover:bg-mint/20"
                     >
-                      <ProductThumbnail image={medicine.image} alt={title} />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
                           <p className="font-medium text-charcoal">{title}</p>

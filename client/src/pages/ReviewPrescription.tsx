@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/Button";
@@ -24,15 +24,30 @@ export function ReviewPrescription() {
     refetchInterval: (query) => (query.state.data?.prescription.status === "EXTRACTING" ? 1500 : false),
   });
 
+  // Saving is one server call that marks the prescription APPROVED after
+  // checking every medicine has a decision. The "saved" state shown on
+  // this page is read back from the server, so it appears only after the
+  // save succeeded — and is still there after a refresh.
+  const savingRef = useRef(false);
   const approveMutation = useMutation({
     mutationFn: () => prescriptionsApi.approvePrescription(id as string),
     // Stay on this page: the next steps (schedules, then the summary of
     // what was saved) happen here.
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["prescription", id] });
-      queryClient.invalidateQueries({ queryKey: ["medications"] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["prescription", id] }),
+        queryClient.invalidateQueries({ queryKey: ["medications"] }),
+      ]);
+    },
+    onSettled: () => {
+      savingRef.current = false;
     },
   });
+  function save() {
+    if (savingRef.current || approveMutation.isPending) return;
+    savingRef.current = true;
+    approveMutation.mutate();
+  }
 
   // Re-runs the AI reading after a failure (provider busy, quota, a
   // timeout). The server only allows this while nothing has been reviewed.
@@ -177,6 +192,19 @@ export function ReviewPrescription() {
             </div>
           )}
 
+          {isApproved && (
+            <div className="rounded-3xl border border-forest/30 bg-mint/40 p-5" role="status">
+              <p className="font-medium text-forest">{"\u2713"} Medicines saved and confirmed</p>
+              <p className="mt-1 text-sm text-charcoal/75">
+                {confirmedCount} confirmed medicine{confirmedCount === 1 ? " is" : "s are"} saved to your account
+                {medications.some((m) => m.reviewStatus === "NEEDS_CLARIFICATION")
+                  ? ". Medicines you weren't sure about are kept out of reminders until you resolve them."
+                  : "."}{" "}
+                You'll find them under My medications.
+              </p>
+            </div>
+          )}
+
           {isApproved && visibleCards.length > 0 && (
             <p className="text-sm text-charcoal/75">
               You marked these as uncertain. Once you've checked them with your prescriber or pharmacist, confirm or remove
@@ -185,7 +213,12 @@ export function ReviewPrescription() {
           )}
 
           {visibleCards.map((medication) => (
-            <MedicationReviewCard key={medication.id} medication={medication} prescriptionId={prescription.id} />
+            <MedicationReviewCard
+              key={medication.id}
+              medication={medication}
+              prescriptionId={prescription.id}
+              prescriptionApproved={isApproved}
+            />
           ))}
 
           {isApproved && confirmedWithoutSchedule.length > 0 && (
@@ -231,9 +264,14 @@ export function ReviewPrescription() {
           {!isApproved && medications.length > 0 && (
             <div className="flex flex-col gap-2 border-t border-charcoal/10 pt-6">
               <div className="flex flex-wrap items-center gap-4">
-                <Button onClick={() => approveMutation.mutate()} disabled={!canSave || approveMutation.isPending}>
+                <Button onClick={save} disabled={!canSave || approveMutation.isPending}>
                   {approveMutation.isPending ? "Saving…" : "Save confirmed medicines"}
                 </Button>
+                {canSave && !approveMutation.isPending && !approveMutation.isError && (
+                  <p className="text-sm text-charcoal/75">
+                    All medicines have a decision. Save to add the confirmed ones to your account.
+                  </p>
+                )}
                 {undecided > 0 && (
                   <p className="text-sm text-gray">
                     {undecided} medicine{undecided === 1 ? " still needs" : "s still need"} a decision.
@@ -247,7 +285,11 @@ export function ReviewPrescription() {
                 Only confirmed medicines are saved and can be scheduled. Medicines marked uncertain stay out of every
                 schedule until you resolve them.
               </p>
-              {approveMutation.isError && <p className="text-sm text-red-700">{(approveMutation.error as Error).message}</p>}
+              {approveMutation.isError && (
+                <p className="text-sm text-red-700" role="alert">
+                  Not saved: {(approveMutation.error as Error).message} Nothing was lost — press Save to try again.
+                </p>
+              )}
             </div>
           )}
 
