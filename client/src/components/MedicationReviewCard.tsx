@@ -123,11 +123,11 @@ export function MedicationReviewCard({
     handleSubmit(
       (data) => mutation.mutate({ ...data, reviewStatus: status }, { onSettled: () => (inFlight.current = false) }),
       () => {
-        // A required field is missing (e.g. how often to take it). Open the
-        // form so the problem is visible instead of the click doing nothing.
+        // The name is missing. Open the form so the problem is visible
+        // instead of the click doing nothing.
         inFlight.current = false;
         setEditing(true);
-        setInvalidHint("Some details are missing. Fill in the highlighted fields, then confirm.");
+        setInvalidHint("Enter the medicine name, then confirm.");
       }
     )();
   }
@@ -160,6 +160,17 @@ export function MedicationReviewCard({
     { label: "Other instructions", value: watch("confirmedInstructions"), field: "instructions" },
   ];
   const decided = medication.reviewStatus !== "NEEDS_REVIEW";
+  // From the saved record, not the form: what was actually confirmed.
+  const noDose = !medication.confirmedDosageInstructions?.trim();
+  const noFrequency = !medication.confirmedFrequency?.trim();
+  const missingInstructions =
+    noDose && noFrequency
+      ? "The dose and how often to take it aren't"
+      : noDose
+        ? "The dose isn't"
+        : noFrequency
+          ? "How often to take it isn't"
+          : null;
 
   return (
     <div className="rounded-3xl border border-charcoal/10 p-6">
@@ -308,6 +319,12 @@ export function MedicationReviewCard({
             >
               Change
             </button>
+          )}
+          {reviewStatus === "CONFIRMED" && missingInstructions && (
+            <p className="w-full text-sm text-amber-800">
+              {missingInstructions} written on the prescription, so nothing was filled in. Ask your doctor or
+              pharmacist before taking this medicine.
+            </p>
           )}
         </div>
       ) : (

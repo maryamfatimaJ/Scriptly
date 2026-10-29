@@ -65,9 +65,11 @@ substitute") is actually enforced in code — not just described.
    editable fields with per-field confidence dots, the medicine-reference
    match, and warnings. Confirming a medication
    (`reviewStatus: CONFIRMED`) is rejected by both client and server
-   validation unless it has a name, dosage instructions, and a frequency
-   — "high confidence" is never treated as a substitute for that human
-   confirmation.
+   validation unless it has a name. A dose or frequency that isn't written
+   stays empty rather than being filled in; the confirmed card tells the
+   user to ask a doctor or pharmacist, and with no frequency the schedule
+   planner proposes no times. "High confidence" is never treated as a
+   substitute for the human confirmation.
 8. **Approve** (`POST /api/prescriptions/:id/approve`) — refused unless
    every medication on the prescription is `CONFIRMED` or `REJECTED` (no
    `NEEDS_REVIEW`/`NEEDS_CLARIFICATION` left outstanding), and refused if

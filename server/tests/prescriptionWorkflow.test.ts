@@ -155,16 +155,73 @@ describe("prescription capture -> extraction -> review -> approval workflow", ()
   });
 
   describe("review and approval gating", () => {
-    it("rejects confirming a medication that's missing required fields", async () => {
+    it("rejects confirming a medication without a name", async () => {
       const user = await AuthedAgent.register(server, uniqueTestUser("incompleteconfirm"));
       const upload = await user.uploadPrescription(TINY_JPEG, "rx.jpg", "image/jpeg");
       const id = upload.body.prescription.id;
       const extracted = await user.post(`/api/prescriptions/${id}/extract`);
       const medicationId = extracted.body.prescription.medications[0].id;
 
-      // No confirmedDosageInstructions/confirmedFrequency supplied.
       const res = await user.patch(`/api/medications/${medicationId}`, { reviewStatus: "CONFIRMED" });
       expect(res.status).toBe(400);
+      const blank = await user.patch(`/api/medications/${medicationId}`, { reviewStatus: "CONFIRMED", confirmedName: "" });
+      expect(blank.status).toBe(400);
+      const unchanged = await user.get(`/api/prescriptions/${id}`);
+      expect(unchanged.body.prescription.medications.find((m: { id: string }) => m.id === medicationId).reviewStatus).toBe(
+        "NEEDS_REVIEW"
+      );
+    });
+
+    it("confirms and saves a medicine whose dose and frequency aren't written, without filling them in", async () => {
+      const user = await AuthedAgent.register(server, uniqueTestUser("nameonlyconfirm"));
+      const upload = await user.uploadPrescription(TINY_JPEG, "rx.jpg", "image/jpeg");
+      const id = upload.body.prescription.id;
+      const extracted = await user.post(`/api/prescriptions/${id}/extract`);
+      // The mock reads Cetirizine's name and strength but no dose or frequency.
+      const cetirizine = extracted.body.prescription.medications.find(
+        (m: { extractedName: string }) => m.extractedName === "Cetirizine"
+      );
+      expect(cetirizine.extractedFrequency).toBeNull();
+      expect(cetirizine.extractedDosageInstructions).toBeNull();
+
+      // Exactly what the review form sends: what was read, blanks as "".
+      const res = await user.patch(`/api/medications/${cetirizine.id}`, {
+        reviewStatus: "CONFIRMED",
+        confirmedName: "Cetirizine",
+        confirmedStrength: cetirizine.extractedStrength,
+        confirmedForm: cetirizine.extractedForm,
+        confirmedDosageInstructions: "",
+        confirmedFrequency: "",
+        confirmedTiming: "",
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.medication.reviewStatus).toBe("CONFIRMED");
+
+      // Saved to this user's account, as a page reload would see it.
+      const reloaded = await user.get(`/api/prescriptions/${id}`);
+      const saved = reloaded.body.prescription.medications.find((m: { id: string }) => m.id === cetirizine.id);
+      expect(saved.reviewStatus).toBe("CONFIRMED");
+      expect(saved.confirmedName).toBe("Cetirizine");
+      expect(saved.confirmedStrength).toBe("10 mg");
+      expect(saved.confirmedForm).toBe("tablet");
+      expect(saved.confirmedDosageInstructions || null).toBeNull();
+      expect(saved.confirmedFrequency || null).toBeNull();
+      // The original reading is kept alongside.
+      expect(saved.extractedName).toBe("Cetirizine");
+
+      // No frequency means no reminder times are proposed.
+      const preview = await user.get(`/api/medications/${cetirizine.id}/schedule-preview`);
+      expect(preview.status).toBe(200);
+      expect(preview.body.preview.proposal.status).toBe("NEEDS_CLARIFICATION");
+      expect(preview.body.preview.proposal.slots).toHaveLength(0);
+
+      // The prescription can be saved with it once the rest are decided.
+      for (const m of reloaded.body.prescription.medications) {
+        if (m.id === cetirizine.id) continue;
+        await user.patch(`/api/medications/${m.id}`, { reviewStatus: "REJECTED" });
+      }
+      const approve = await user.post(`/api/prescriptions/${id}/approve`);
+      expect(approve.status).toBe(200);
     });
 
     it("refuses to approve while any medication is still unresolved", async () => {

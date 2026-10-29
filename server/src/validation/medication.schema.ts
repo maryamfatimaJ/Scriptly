@@ -1,8 +1,10 @@
 import { z } from "zod";
 
 // Fields a reviewer can edit/confirm on an extracted medication. Confirming
-// a medication (reviewStatus: "CONFIRMED") requires the minimum set of
-// fields a schedule actually needs, enforced below with a refinement.
+// a medication (reviewStatus: "CONFIRMED") requires only its name: a dose
+// or frequency that isn't written on the prescription stays empty rather
+// than being made up. Scheduling handles the gap — with no frequency the
+// planner proposes no times (see utils/schedulePlanner.ts).
 export const updateMedicationSchema = z
   .object({
     confirmedName: z.string().trim().min(1).max(200).optional(),
@@ -27,11 +29,11 @@ export const updateMedicationSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.reviewStatus === "CONFIRMED") {
-      if (!data.confirmedName || !data.confirmedDosageInstructions || !data.confirmedFrequency) {
+      if (!data.confirmedName) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message:
-            "A medication can only be confirmed once it has a name, dosage instructions, and a frequency.",
+          message: "Enter the medicine's name before confirming it.",
+          path: ["confirmedName"],
         });
       }
     }

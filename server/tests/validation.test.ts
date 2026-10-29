@@ -16,9 +16,33 @@ describe("auth validation", () => {
 });
 
 describe("medication confirmation rules", () => {
-  it("refuses to confirm a medication missing required fields", () => {
+  it("refuses to confirm a medication without a name", () => {
     const result = updateMedicationSchema.safeParse({ reviewStatus: "CONFIRMED" });
     expect(result.success).toBe(false);
+  });
+
+  it("refuses to confirm with a blank name", () => {
+    const result = updateMedicationSchema.safeParse({
+      reviewStatus: "CONFIRMED",
+      confirmedName: "   ",
+      confirmedDosageInstructions: "1 tablet",
+      confirmedFrequency: "BD",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("allows confirming with a name when dose and frequency are not written", () => {
+    expect(updateMedicationSchema.safeParse({ reviewStatus: "CONFIRMED", confirmedName: "Cetirizine" }).success).toBe(true);
+    // As the review form sends unwritten fields: empty strings.
+    expect(
+      updateMedicationSchema.safeParse({
+        reviewStatus: "CONFIRMED",
+        confirmedName: "Cetirizine",
+        confirmedDosageInstructions: "",
+        confirmedFrequency: "",
+        confirmedTiming: "",
+      }).success
+    ).toBe(true);
   });
 
   it("allows confirming once name, dosage instructions, and frequency are present", () => {

@@ -22,10 +22,12 @@ export const medicationReviewSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.reviewStatus === "CONFIRMED") {
-      if (!data.confirmedName || !data.confirmedDosageInstructions || !data.confirmedFrequency) {
+      // Only the name is required. A dose or frequency the prescription
+      // doesn't state is left empty, never filled in.
+      if (!data.confirmedName) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Confirming requires a name, dosage instructions, and a frequency.",
+          message: "Enter the medicine's name from your prescription before confirming.",
           path: ["confirmedName"],
         });
       }
