@@ -101,6 +101,15 @@ Not yet built:
 - Accuracy measurement on real, consented prescription photos (testing so far used generated sample prescriptions).
 - Hosted deployment and a mobile app.
 
+## Team
+
+- **Maryam Fatima**
+- **Muhammad Rehan**
+
 ## License
 
 Released under the [MIT License](LICENSE). Copyright (c) 2026 Scriptly team.
+
+
+## Screenshot 
+![alt text](image.png)

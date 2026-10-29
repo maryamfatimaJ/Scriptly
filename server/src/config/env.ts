@@ -30,6 +30,11 @@ export const env = {
   // CORS
   corsOrigin: optional("CORS_ORIGIN", "http://localhost:5173"),
 
+  // Number of reverse proxies in front of the app, so req.ip (the rate
+  // limiter's key) is the user's address, not a proxy's. 1 = one proxy
+  // (e.g. Render's load balancer); 2 = Vercel's /api rewrite in front of it.
+  trustProxy: Number(optional("TRUST_PROXY", "1")),
+
   // Uploads
   uploadDir: optional("UPLOAD_DIR", "uploads/prescriptions"),
   maxUploadSizeMb: Number(optional("MAX_UPLOAD_SIZE_MB", "10")),
